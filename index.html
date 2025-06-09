@@ -1,0 +1,152 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2113.65">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="fr"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;HuntStat Web&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>body {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-family: Arial, sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #F2EFE5;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>color: #2E4B27;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>max-width: 400px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin: auto;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>h1 {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>text-align: center;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-size: 28px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 24px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>label {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-weight: bold;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>select, button, input {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>width: 100%;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin: 8px 0;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-size: 16px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.counter {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>display: flex;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>justify-content: space-between;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>align-items: center;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin: 12px 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.counter span {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-size: 22px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-weight: bold;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.counter button {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>width: 48%;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>.precision-box {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>text-align: center;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background-color: #d0e9ff;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>color: #003366;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>font-weight: bold;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>margin-top: 12px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>padding: 10px;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 8px;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;h1&gt;HuntStat Web&lt;/h1&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;label for="chasseur"&gt;Nom du chasseur :&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="chasseur"&gt;Bernard&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;label for="gibier"&gt;Gibier :&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;select id="gibier"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Palombe"&gt;Palombe&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Caille"&gt;Caille&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Faisan"&gt;Faisan&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Perdreau"&gt;Perdreau&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Becasse"&gt;Bécasse&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Lievre"&gt;Lièvre&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Lapin"&gt;Lapin&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Sanglier"&gt;Sanglier&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Chevreuil"&gt;Chevreuil&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;option value="Autre"&gt;Autre&lt;/option&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/select&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="counter"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;span&gt;Tirs: &lt;span id="tirs"&gt;0&lt;/span&gt;&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button onclick="modifier('tirs', 1)"&gt;+ Tir&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button onclick="modifier('tirs', -1)"&gt;- Tir&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="counter"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;span&gt;Tués: &lt;span id="tues"&gt;0&lt;/span&gt;&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button onclick="modifier('tues', 1)"&gt;+ Tué&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>&lt;button onclick="modifier('tues', -1)"&gt;- Tué&lt;/button&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>&lt;/div&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="precision-box"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>Taux de précision : &lt;span id="precision"&gt;0%&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;button onclick="enregistrer()"&gt;Enregistrer&lt;/button&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function getKey() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>return document.getElementById('gibier').value;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>function charger() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const key = getKey();</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const data = JSON.parse(localStorage.getItem('huntstat_' + key)) || { tirs: 0, tues: 0 };</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('tirs').textContent = data.tirs;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('tues').textContent = data.tues;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>calculerPrecision();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>function modifier(type, valeur) {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const id = type;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>let current = parseInt(document.getElementById(id).textContent);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>current = Math.max(0, current + valeur);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById(id).textContent = current;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>calculerPrecision();</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>function enregistrer() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const key = getKey();</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const tirs = parseInt(document.getElementById('tirs').textContent);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const tues = parseInt(document.getElementById('tues').textContent);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>localStorage.setItem('huntstat_' + key, JSON.stringify({ tirs: tirs, tues: tues }));</p>
+<p class="p1"><span class="Apple-converted-space">            </span>alert("Données enregistrées pour " + key);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>function calculerPrecision() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const tirs = parseInt(document.getElementById('tirs').textContent);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const tues = parseInt(document.getElementById('tues').textContent);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>const precision = tirs === 0 ? 0 : Math.round((tues / tirs) * 100);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>document.getElementById('precision').textContent = precision + '%';</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>document.getElementById('gibier').addEventListener('change', charger);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>window.onload = charger;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
