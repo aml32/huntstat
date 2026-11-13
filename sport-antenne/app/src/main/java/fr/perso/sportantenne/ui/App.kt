@@ -1,7 +1,24 @@
 package fr.perso.sportantenne.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import fr.perso.sportantenne.core.Races
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -155,6 +172,78 @@ private fun styleOf(sport: String) = SPORT_STYLES[norm(sport)] ?: DEFAULT_STYLE
 
 private val CHANNEL_COLORS = listOf(0xFF1565C0, 0xFFC62828, 0xFF2E7D32, 0xFF6A1B9A, 0xFFEF6C00, 0xFF00838F, 0xFFAD1457, 0xFF4E342E).map { Color(it) }
 
+/**
+ * Pastille de sport dessinée : disque en dégradé avec reflet et ombre portée, pictogramme au centre.
+ * Elle rebondit légèrement quand elle devient active et s'estompe quand elle ne l'est pas.
+ */
+@Composable
+private fun SportBadge(sport: String, size: Dp, active: Boolean = true) {
+    val st = styleOf(sport)
+    val scale by animateFloatAsState(
+        if (active) 1f else 0.84f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "badge",
+    )
+    val light = lerp(st.color, Color.White, 0.5f)
+    val dark = lerp(st.color, Color.Black, 0.3f)
+    Box(
+        Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (active) 1f else 0.45f }
+            .shadow(if (active) 6.dp else 0.dp, CircleShape).clip(CircleShape)
+            .background(Brush.linearGradient(listOf(light, st.color, dark)))
+            .drawBehind {
+                // Reflet : un ovale clair dans le tiers supérieur.
+                drawOval(
+                    Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.6f), Color.Transparent)),
+                    topLeft = Offset(this.size.width * 0.16f, this.size.height * 0.06f),
+                    size = Size(this.size.width * 0.68f, this.size.height * 0.46f),
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(st.emoji, fontSize = (size.value * 0.5f).sp)
+    }
+}
+
+/** Étiquettes de l'épreuve : qui court, quel format, quelle distance, où. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RaceTags(e: Event, sportColor: Color) {
+    val r = e.race
+    if (r.isEmpty) return
+    FlowRow(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when (r.gender) {
+            Races.MEN -> Tag("♂ Hommes", Color(0xFF1565C0))
+            Races.WOMEN -> Tag("♀ Femmes", Color(0xFFC2185B))
+            Races.MIXED -> Tag("⚥ Mixte", Color(0xFF6A1B9A))
+        }
+        if (r.format.isNotEmpty()) Tag(r.format, sportColor)
+        if (r.distance.isNotEmpty()) Tag(r.distance, Color(0xFF455A64))
+        if (r.place.isNotEmpty()) Tag("📍 ${r.place}", Color(0xFF00695C))
+    }
+}
+
+@Composable
+private fun Tag(text: String, color: Color) {
+    Text(
+        text, Modifier.clip(RoundedCornerShape(6.dp)).background(color).padding(horizontal = 7.dp, vertical = 2.dp),
+        color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+    )
+}
+
+/** Badge « EN COURS » avec un point qui clignote. */
+@Composable
+private fun LiveBadge() {
+    val alpha by rememberInfiniteTransition(label = "live").animateFloat(
+        1f, 0.25f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "blink",
+    )
+    Row(
+        Modifier.padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(LiveRed).padding(horizontal = 5.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(6.dp).graphicsLayer { this.alpha = alpha }.clip(CircleShape).background(Color.White))
+        Spacer(Modifier.width(4.dp))
+        Text("EN COURS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 private enum class Screen(val label: String, val icon: ImageVector) {
     PROGRAMME("À venir", Icons.Filled.Home),
     FAVORITES("Favoris", Icons.Filled.Star),
@@ -195,8 +284,9 @@ fun SportAntenneApp(state: AppState) {
             bottomBar = {
                 NavigationBar {
                     Screen.entries.forEachIndexed { i, s ->
+                        val bounce by animateFloatAsState(if (screen == i) 1.18f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "nav")
                         NavigationBarItem(
-                            screen == i, { screen = i }, { Icon(s.icon, null) }, label = { Text(s.label, fontWeight = FontWeight.Bold) },
+                            screen == i, { screen = i }, { Icon(s.icon, null, Modifier.graphicsLayer { scaleX = bounce; scaleY = bounce }) }, label = { Text(s.label, fontWeight = FontWeight.Bold) },
                             colors = NavigationBarItemDefaults.colors(
                                 indicatorColor = Orange, selectedIconColor = Color.White, selectedTextColor = MaterialTheme.colorScheme.onSurface,
                             ),
@@ -309,8 +399,9 @@ private fun ProgrammeScreen(
 
 @Composable
 private fun SportChip(label: String, emoji: String, color: Color, selected: Boolean, onClick: () -> Unit) {
+    val scale by animateFloatAsState(if (selected) 1.06f else 1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "chip")
     Row(
-        Modifier.clip(RoundedCornerShape(50))
+        Modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(50))
             .background(if (selected) color else color.copy(alpha = 0.13f))
             .border(1.5.dp, color, RoundedCornerShape(50))
             .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp),
@@ -334,13 +425,9 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
         Box(Modifier.width(7.dp).fillMaxHeight().background(st.color))
         Column(Modifier.width(74.dp).padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(hour(e.start), fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
-            if (live) {
-                Text(
-                    "EN COURS", Modifier.padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).background(LiveRed).padding(horizontal = 5.dp, vertical = 1.dp),
-                    color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                )
-            } else {
-                Text(st.emoji, fontSize = 20.sp)
+            if (live) LiveBadge() else {
+                Spacer(Modifier.height(3.dp))
+                SportBadge(e.sport, 30.dp)
             }
         }
         Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp)) {
@@ -350,17 +437,27 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
                 TeamLogo(e.awayLogo, start = true)
             }
             Text(subtitle(e), color = st.color.forText(), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            RaceTags(e, st.color)
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                e.channels.take(2).forEach { ChannelBadge(state.channels[it], it, compact = e.channels.size > 1) }
-                if (e.channels.size > 2) Text("+${e.channels.size - 2}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            // Toutes les chaînes qui diffusent l'événement, une par ligne.
+            if (e.channels.size > 1) {
+                Text("Diffusé sur ${e.channels.size} chaînes", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(3.dp))
             }
-            if (e.verified || e.replay) {
-                Text(
-                    if (e.verified) "✓ Direct confirmé" else "Rediffusion", Modifier.padding(top = 4.dp),
-                    color = if (e.verified) confirmedGreen() else MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                e.channels.forEach { ChannelBadge(state.channels[it], it, compact = e.channels.size > 1) }
             }
+            // Trois états, toujours affichés : confirmé par un calendrier, non confirmé, ou rediffusion.
+            Text(
+                when {
+                    e.verified -> "✓ Direct confirmé"
+                    e.replay -> "Rediffusion"
+                    else -> "Horaire non confirmé par un calendrier"
+                },
+                Modifier.padding(top = 4.dp),
+                color = if (e.verified) confirmedGreen() else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp, fontWeight = if (e.verified) FontWeight.Bold else FontWeight.Normal,
+            )
         }
         if (state.settings.hasAlert(e) && !live) {
             Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.padding(end = 10.dp).size(22.dp), tint = Orange)
@@ -384,7 +481,7 @@ private fun TeamLogo(url: String, start: Boolean = false) {
 private fun ChannelBadge(channel: Channel?, id: String, compact: Boolean = false) {
     val name = channel?.name ?: id
     Row(verticalAlignment = Alignment.CenterVertically) {
-        ChannelLogo(channel, id, 38)
+        ChannelLogo(channel, id, if (compact) 30 else 38)
         Spacer(Modifier.width(6.dp))
         Text(name, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -447,9 +544,7 @@ private fun FavoritesScreen(state: AppState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Checkbox(checked, { state.update { it.toggleSport(s) } })
-                Box(Modifier.size(42.dp).clip(CircleShape).background(st.color.copy(alpha = if (checked) 1f else 0.18f)), contentAlignment = Alignment.Center) {
-                    Text(st.emoji, fontSize = 20.sp)
-                }
+                SportBadge(s, 44.dp, active = checked)
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(s, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text(
@@ -665,10 +760,12 @@ private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit
                 Spacer(Modifier.height(8.dp))
                 Text(
                     (if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +
-                        if (e.replay) " · Rediffusion" else if (e.verified) " · Direct confirmé" else "",
+                        if (e.replay) " · Rediffusion" else if (e.verified) " · Direct confirmé" else " · Horaire non confirmé",
                     fontWeight = FontWeight.SemiBold, color = if (e.start <= now) LiveRed else MaterialTheme.colorScheme.onSurface,
                 )
+                RaceTags(e, st.color)
                 Spacer(Modifier.height(10.dp))
+                if (e.channels.size > 1) Text("Diffusé sur ${e.channels.size} chaînes :", fontWeight = FontWeight.Bold)
                 e.channels.forEach { id ->
                     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         ChannelLogo(state.channels[id], id, 48)

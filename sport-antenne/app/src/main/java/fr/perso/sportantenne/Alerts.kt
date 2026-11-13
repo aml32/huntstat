@@ -46,7 +46,7 @@ object Alerts {
             val pending = intent(ctx, code) {
                 it.putExtra("id", e.id)
                 it.putExtra("code", code)
-                it.putExtra("title", e.headline)
+                it.putExtra("title", e.label)
                 it.putExtra("text", "${hour.format(Date(e.start))} sur $names · ${e.competition}")
             }
             val at = maxOf(e.start - settings.alertMinutes * 60_000L, now + 3_000L)

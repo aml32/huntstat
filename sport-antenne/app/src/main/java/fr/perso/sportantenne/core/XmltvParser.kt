@@ -35,7 +35,9 @@ object XmltvParser {
     private val MAG_TITLE = Regex("\\b(le mag|l emission|le debrief|avant match|apres match|le journal|le jt|zap)\\b")
     private val ROUND = Regex(
         "^\\(?(\\d+(er|re|e|eme|nd|nde)?\\b|finale|demi|quart|huitieme|seizieme|barrage|phase|groupe|poule" +
-            "|journee|match aller|match retour|la course|course|essais|qualif|sprint|etape|tour\\b|carte)",
+            "|journee|match aller|match retour|la course|course|essais|qualif|sprint|etape|tour\\b|carte" +
+            "|mass start|poursuite|relais|individuel|super sprint|slalom|geant|super g|descente|combine|contre la montre|prologue" +
+            "|messieurs|dames|hommes|femmes|mixte|epreuve|manche)",
     )
     private val MATCHDAY_TAIL = Regex("\\s*[-,]?\\s*\\(?\\d+\\s?(?:er|re|e|ème|eme)\\s+journée.*$", RegexOption.IGNORE_CASE)
     private val EPISODE = Regex("S\\d+E\\d+|[!?]|^Episode|^Saison", RegexOption.IGNORE_CASE)

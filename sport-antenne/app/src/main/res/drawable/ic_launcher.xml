@@ -1,10 +1,27 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#123524" android:pathData="M0,0h108v108h-108z" />
-    <path android:fillColor="#00000000" android:strokeColor="#7CE0A3" android:strokeWidth="5"
-        android:pathData="M28,36h52a4,4 0,0 1,4 4v30a4,4 0,0 1,-4 4h-52a4,4 0,0 1,-4 -4v-30a4,4 0,0 1,4 -4z" />
-    <path android:fillColor="#7CE0A3" android:pathData="M47,45l18,10l-18,10z" />
-    <path android:fillColor="#00000000" android:strokeColor="#7CE0A3" android:strokeWidth="5" android:strokeLineCap="round"
-        android:pathData="M42,84h24M44,26l10,10l10,-10" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="108" android:endY="108">
+                <item android:offset="0" android:color="#FF1A237E" />
+                <item android:offset="0.55" android:color="#FF6A1B9A" />
+                <item android:offset="1" android:color="#FFC2185B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- écran -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M28,36h52a5,5 0,0 1,5 5v30a5,5 0,0 1,-5 5h-52a5,5 0,0 1,-5 -5v-30a5,5 0,0 1,5 -5z" />
+    <path android:pathData="M30,42h48v28h-48z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="30" android:startY="42" android:endX="78" android:endY="70">
+                <item android:offset="0" android:color="#FFFF9100" />
+                <item android:offset="1" android:color="#FFFF3D00" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- lecture -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M49,47l16,9l-16,9z" />
+    <!-- pied et antennes -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"
+        android:pathData="M42,83h24M45,26l9,10l9,-10" />
 </vector>

@@ -183,7 +183,14 @@ object Competitions {
         add("MMA", WORLD, "UFC" to "ufc", "PFL" to "pfl", "KSW, Hexagone et autres" to ".*")
         add("Ski", WORLD, "Tournée des quatre tremplins" to "4 tremplins|quatre tremplins", "Saut à ski" to "saut|tremplins?|vol a ski",
             "Championnats du monde" to "championnats? du monde", "Coupe du monde de ski alpin" to "coupe du monde|ski alpin|slalom|descente|geant|super g")
-        add("Biathlon", WORLD, "Coupe du monde" to "coupe du monde", "Championnats du monde" to "championnats? du monde")
+        add("Biathlon", WORLD,
+            "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Championnats du monde juniors et jeunes" to "(championnats?|mondiaux) (du monde )?(juniors?|jeunes)|juniors?|jeunes",
+            "Championnats du monde" to "championnats? du monde|mondiaux", "Championnats d'Europe" to "championnats? d europe|europeens",
+            "IBU Cup" to "ibu cup|coupe ibu", "Coupe du monde" to "coupe du monde|world cup",
+            "Championnats de France et Samse Tour" to "championnats? de france|samse|national tour",
+            "Biathlon d'été et courses de préparation" to "ete|pre saison|preparation|city biathlon|nordic festival|world team challenge|sur route|ski roues|loop one|blink",
+            "Autres courses" to ".*",
+        )
         add("Athlétisme", WORLD, "Diamond League" to "diamond league", "Championnats du monde" to "championnats? du monde", "Championnats d'Europe" to "championnats? d europe", "Marathons" to "marathons?")
         add("Natation", WORLD, "Championnats du monde" to "championnats? du monde", "Championnats d'Europe" to "championnats? d europe")
         add("Judo", WORLD, "Grand Slam et Grand Prix" to "grand slam|grand chelem|grand prix", "Championnats du monde" to "championnats? du monde")
@@ -207,7 +214,6 @@ object Competitions {
         add("Catch", US, "WWE" to "wwe|raw|smackdown|nxt|wrestlemania", "AEW" to "aew|dynamite|collision", "Autres shows" to ".*")
         add("Ski", WORLD, "Ski de fond" to "ski de fond|tour de ski", "Ski freestyle et snowboard" to "freestyle|snowboard|ski cross|bosses",
             "Combiné nordique" to "combine nordique", "Jeux olympiques d'hiver" to "jeux olympiques|olympi\\w*", "Autres épreuves (Levi, Kitzbühel, Sölden…)" to ".*")
-        add("Biathlon", WORLD, "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Courses de préparation et autres" to ".*")
         add("Patinage", WORLD, "Grand Prix ISU" to "grand prix|isu|skate america|skate canada|nhk|internationaux de france", "Championnats du monde" to "championnats? du monde",
             "Championnats d'Europe" to "championnats? d europe", "Patinage de vitesse et short-track" to "vitesse|short track|coupe du monde", "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Galas et autres épreuves" to ".*")
         add("Athlétisme", WORLD, "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Meetings et cross" to "meeting|cross|indoor|salle", "Championnats de France" to "championnats? de france")
@@ -236,6 +242,19 @@ object Competitions {
         add("Sports extrêmes", WORLD, "X Games, skate et freeride" to ".*")
         add("Escalade", WORLD, "Coupe du monde et championnats" to ".*")
         add("Poker", WORLD, "WSOP, EPT et tournois" to ".*")
+        add("Ski de fond", WORLD, "Tour de Ski" to "tour de ski", "Coupe du monde" to "coupe du monde", "Championnats du monde" to "championnats? du monde|mondiaux",
+            "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Combiné nordique" to "combine nordique", "Courses longue distance" to "courses? longue distance|transjurassienne|vasaloppet|marcialonga|ski classics", "Autres courses" to ".*")
+        add("Curling", WORLD, "Championnats du monde et d'Europe" to "championnats?", "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Autres tournois" to ".*")
+        add("Bobsleigh, luge et skeleton", WORLD, "Coupe du monde" to "coupe du monde", "Championnats du monde" to "championnats? du monde", "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Autres épreuves" to ".*")
+        add("Hockey sur gazon", WORLD, "Pro League et championnats" to ".*")
+        add("Cricket", WORLD, "Coupe du monde et tests" to ".*")
+        add("Tir et tir à l'arc", WORLD, "Coupe du monde et championnats" to ".*")
+        add("Pelote basque", FR, "Championnats et masters" to ".*")
+        add("Pentathlon moderne", WORLD, "Coupe du monde et championnats" to ".*")
+        add("Échecs", WORLD, "Championnats et tournois" to ".*")
+        add("Futsal", WORLD, "Championnat de France et Coupes d'Europe" to ".*")
+        add("Beach soccer", WORLD, "Championnats et Coupe du monde" to ".*")
+        add("Beach-volley", WORLD, "Pro Tour et championnats" to ".*")
         add("Tennis", FR, "Tournois français (Challengers, Open)" to "tournois? francais|open d|orleans|challenger|play offs?|interclubs")
         add("Basket-ball", EU, "Liga ACB (Espagne)" to "acb|liga endesa", "Championnats étrangers" to "championnats? etrangers|championnat d (italie|allemagne|espagne)|lega|bbl")
         add("Handball", EU, "Bundesliga (Allemagne)" to "bundesliga", "Liga Asobal (Espagne)" to "asobal")

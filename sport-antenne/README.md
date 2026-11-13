@@ -13,6 +13,11 @@ et la chaîne qui les diffuse. Sans pub, sans compte, sans achat.
   qui ne sont rattachés à aucune (section « HORS CATALOGUE »).
 - **Logos** : chaînes (adresse fournie par le guide TV, pastille de couleur à défaut) et écussons
   des équipes pour les directs confirmés (fournis par le calendrier).
+- **Détail des épreuves** (`core/Races.kt`) : hommes / femmes / mixte, format (biathlon : sprint,
+  poursuite, individuel, mass start, relais, relais mixte, relais mixte simple ; ski, cyclisme,
+  sports mécaniques, tours de tournoi), distance et lieu, lus dans les libellés du guide.
+  Le biathlon n'a pas de calendrier indépendant : le serveur de l'IBU exige une authentification.
+- **Plusieurs chaînes** : toutes les chaînes d'une même diffusion sont listées, une par ligne.
 - **Chaînes** : cocher les chaînes reçues pour masquer les autres.
 - **Alertes** : notification avant chaque direct d'une compétition cochée (délai réglable), ou match par match.
 - Ajout au calendrier avec la chaîne dans le titre, widget d'accueil.
@@ -37,7 +42,7 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-68 tests automatiques (`./gradlew testDebugUnitTest`) :
+75 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;

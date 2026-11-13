@@ -42,9 +42,14 @@ data class Event(
     /** Logos des équipes (direct confirmé uniquement). */
     val homeLogo: String = "",
     val awayLogo: String = "",
+    /** Détail de l'épreuve : hommes/femmes/mixte, format, distance, lieu. */
+    val race: RaceInfo = RaceInfo(),
 ) {
     val hasTeams get() = home.isNotBlank() && away.isNotBlank()
     val headline get() = if (hasTeams) "$home – $away" else title
+    /** Libellé complet pour le calendrier et les notifications : l'affiche, ou « Sport · Compétition · Épreuve ». */
+    val label get() = if (hasTeams) headline else listOf(sport, competition.takeIf { norm(it) != norm(sport) } ?: "", detail)
+        .filter { it.isNotBlank() }.joinToString(" · ")
     /** Identifiant stable d'une diffusion précise (alertes). */
     val id get() = "$key@$start"
 }
@@ -93,7 +98,7 @@ object Schedule {
 
     private val REPLAY_WORDS = Regex(
         "\\b(rediffusion|rediff|temps forts|meilleurs moments|resume|retour sur|best of|retro|classic|classique|legende|legendes" +
-            "|grands matchs|les plus beaux|replay|highlights|inside|countdown|conference de presse|avant course|avant match|le podium)\\b",
+            "|grands matchs|les plus beaux|replay|highlights|home of the olympics|hall of fame|documentaire|magazine|inside|countdown|conference de presse|avant course|avant match|le podium)\\b",
     )
     private val YEAR = Regex("\\b(19|20)\\d{2}\\b")
     private val DAYTIME_SPORTS = setOf("cyclisme", "biathlon", "equitation", "athletisme", "trail", "triathlon", "petanque")
@@ -160,6 +165,7 @@ object Schedule {
                     channels = listOf(b.channelId),
                     verified = verdict == Verdict.LIVE,
                     homeLogo = resolution?.homeLogo ?: "", awayLogo = resolution?.awayLogo ?: "",
+                    race = Races.parse(b),
                 )
             }
         }

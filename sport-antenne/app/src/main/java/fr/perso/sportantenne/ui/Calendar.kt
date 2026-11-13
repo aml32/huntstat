@@ -13,7 +13,7 @@ fun addToCalendar(ctx: Context, e: Event, channels: Map<String, Channel>) {
     val names = e.channels.joinToString(", ") { channels[it]?.name ?: it }
     val intent = Intent(Intent.ACTION_INSERT)
         .setData(CalendarContract.Events.CONTENT_URI)
-        .putExtra(CalendarContract.Events.TITLE, "${e.headline} — $names")
+        .putExtra(CalendarContract.Events.TITLE, "${e.label} — $names")
         .putExtra(CalendarContract.Events.EVENT_LOCATION, names)
         .putExtra(
             CalendarContract.Events.DESCRIPTION,

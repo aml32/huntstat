@@ -68,10 +68,12 @@ class AppSmokeTest {
     }
 
     @Test fun walkThroughEveryScreen() {
-        compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous").fetchSemanticsNodes().isNotEmpty() }
+        // Le programme est chargé quand les onglets de sport apparaissent.
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Football").fetchSemanticsNodes().isNotEmpty() }
         shot("1-a-venir")
         compose.onNodeWithText("Demain").performClick()
         shot("2-demain")
+        assertTrue("au moins un événement diffusé sur plusieurs chaînes", Repo.buildEvents(app, GuideStore.load(app.filesDir)!!).any { it.channels.size > 1 && !it.replay })
         compose.onNodeWithText("Aujourd'hui").performClick()
 
         compose.onNodeWithText("Favoris").performClick()

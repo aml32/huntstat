@@ -32,6 +32,7 @@ import fr.perso.sportantenne.core.Fixtures
 import fr.perso.sportantenne.core.Guide
 import fr.perso.sportantenne.core.GuideStore
 import fr.perso.sportantenne.core.Kind
+import fr.perso.sportantenne.core.Races
 import fr.perso.sportantenne.ui.addToCalendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,6 +75,9 @@ class AppFlowsTest {
             b("Bruges", "Gand", 38, "c1", "Pro League"),
             b("Etoile", "Avenir", 42, "c1", "Ligue 3"),  // compétition hors calendrier
             b("Alcaraz", "Sinner", 40, "c2", "ATP Finals", "Tennis"), // sport sans calendrier
+            b("Lille", "Lyon", 32, "c2"),                // même match sur une deuxième chaîne
+            Broadcast(now + 55 * min, now + 130 * min, "c1", "Biathlon", "Coupe du monde", "Coupe du monde", "", "", "Sprint 7,5 km dames", "", Kind.EVENT, false),
+            Broadcast(now + 55 * min, now + 130 * min, "c2", "Biathlon", "Coupe du monde", "Coupe du monde", "", "", "Sprint 7,5 km dames", "", Kind.EVENT, false),
         ),
     )
     private val fixtures = Fixtures(
@@ -130,6 +134,29 @@ class AppFlowsTest {
         assertTrue(compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().size >= 3)
         // Sans favori, tous les sports du programme ont leur onglet.
         assertTrue(shown("Football")); assertTrue(shown("Tennis"))
+    }
+
+    @Test fun everyChannelOfABroadcastIsShown() {
+        ready()
+        val lille = events().first { it.home == "Lille" && !it.replay }
+        assertEquals("les deux diffusions simultanées forment un seul match", listOf("c1", "c2"), lille.channels)
+        assertEquals(1, compose.onAllNodesWithText("Lille – Lyon").fetchSemanticsNodes().size)
+        assertTrue(compose.onAllNodes(hasText("Diffusé sur 2 chaînes")).fetchSemanticsNodes().size >= 2)
+        compose.onNodeWithText("Lille – Lyon").performClick()
+        waitFor("fiche ouverte") { shown("Ajouter à mon calendrier") }
+        assertTrue(shown("Diffusé sur 2 chaînes :")); assertTrue(shown("Sur Canal Test")); assertTrue(shown("Sur beIN Test"))
+    }
+
+    @Test fun biathlonRaceShowsItsFormatAndGender() {
+        ready()
+        assertTrue(shown("♀ Femmes")); assertTrue(shown("Sprint")); assertTrue(shown("7,5 km"))
+        val race = events().first { it.sport == "Biathlon" }
+        assertEquals(Races.WOMEN, race.race.gender); assertEquals("Sprint", race.race.format)
+        // Le calendrier ajouté au téléphone nomme les deux chaînes.
+        compose.runOnUiThread { addToCalendar(compose.activity, race, guide.channels.associateBy { it.id }) }
+        val intent = shadowOf(app).nextStartedActivity
+        assertEquals("Canal Test, beIN Test", intent.getStringExtra(CalendarContract.Events.EVENT_LOCATION))
+        assertEquals("Biathlon · Coupe du monde · Sprint 7,5 km dames — Canal Test, beIN Test", intent.getStringExtra(CalendarContract.Events.TITLE))
     }
 
     @Test fun checkedSportsDecideWhichTabsAndMatchesAppear() {
@@ -226,13 +253,13 @@ class AppFlowsTest {
         compose.onNodeWithText("beIN Test").performClick()
         waitFor("chaîne enregistrée") { settings().myChannels == setOf("c2") }
         tab("À venir")
-        assertTrue(shown("Paris-SG – Marseille")); assertTrue(shown("Alcaraz – Sinner"))
-        assertFalse(shown("Lille – Lyon")); assertFalse(shown("Monaco – Rennes"))
+        assertTrue(shown("Paris-SG – Marseille")); assertTrue(shown("Alcaraz – Sinner")); assertTrue(shown("Lille – Lyon"))
+        assertFalse(shown("Bruges – Gand")); assertFalse(shown("Monaco – Rennes"))
         tab("Chaînes")
         compose.onNodeWithText("beIN Test").performClick()
         waitFor("chaîne décochée") { settings().myChannels.isEmpty() }
         tab("À venir")
-        assertTrue(shown("Lille – Lyon"))
+        assertTrue(shown("Bruges – Gand"))
     }
 
     @Test fun settingsSwitchesChangeTheList() {
