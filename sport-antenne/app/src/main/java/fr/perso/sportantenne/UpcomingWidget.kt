@@ -41,10 +41,10 @@ class UpcomingWidget : AppWidgetProvider() {
             if (ids.isEmpty()) return
             val now = System.currentTimeMillis()
             val all = settings.visible(events ?: emptyList(), now)
-            val shown = (if (settings.hasFavorites) all.filter { settings.isFavorite(it) } else all).take(ROWS.size)
+            val shown = all.take(ROWS.size)
 
             val views = RemoteViews(ctx.packageName, R.layout.widget)
-            views.setTextViewText(R.id.widget_title, if (settings.hasFavorites) "MES FAVORIS À VENIR" else "À VENIR À LA TÉLÉ")
+            views.setTextViewText(R.id.widget_title, if (settings.favSports.isNotEmpty() || settings.hasFavorites) "MES DIRECTS À VENIR" else "EN DIRECT À LA TÉLÉ")
             val day = SimpleDateFormat("EEE", Locale.FRENCH)
             val hour = SimpleDateFormat("HH:mm", Locale.FRENCH)
             val today = day.format(Date(now))

@@ -1,5 +1,6 @@
 package fr.perso.sportantenne
 
+import fr.perso.sportantenne.core.Competitions
 import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.Kind
 import org.junit.Assert.assertEquals
@@ -15,79 +16,107 @@ class SettingsTest {
         kind: Kind = Kind.EVENT, verified: Boolean = false,
     ) = Event("k|$home|$away", start, start + 7_200_000, sport, competition, competition, home, away, "", "", kind, replay, channels, verified)
 
-    @Test fun addingAndRemovingATeamIgnoresCaseAndAccents() {
-        var s = Settings().toggleTeam("Saint-Étienne")
-        assertTrue(s.isFavTeam("saint etienne"))
-        assertTrue(s.isFavorite(event(home = "SAINT-ETIENNE")))
-        assertTrue(s.isFavorite(event(home = "Lyon", away = "Saint-Etienne")))
-        assertFalse(s.isFavorite(event()))
-        s = s.toggleTeam("saint-etienne")
-        assertTrue(s.favTeams.isEmpty())
-        assertFalse(s.hasFavorites)
+    private val ligue1 = Competitions.idOf("Football", "Ligue 1")
+    private val premier = Competitions.idOf("Football", "Premier League")
+    private val list = listOf(
+        event(),
+        event(home = "Arsenal", away = "Chelsea", competition = "Premier League"),
+        event(home = "Bruges", away = "Gand", competition = "Pro League"),
+        event(home = "Toulouse", away = "Pau", sport = "Rugby", competition = "Top 14"),
+        event(home = "Alcaraz", away = "Sinner", sport = "Tennis", competition = "ATP Finals"),
+    )
+    private fun homes(s: Settings) = s.visible(list, now).map { it.home }
+
+    @Test fun withoutFavouritesEverythingIsShown() {
+        assertEquals(5, Settings().visible(list, now).size)
     }
 
-    @Test fun addingTheSameFavouriteTwiceRemovesIt() {
-        val s = Settings().toggleTeam("Lille").toggleTeam("Lyon").toggleTeam("Lille")
-        assertEquals(setOf("Lyon"), s.favTeams)
+    @Test fun checkedSportsHideTheOthers() {
+        val s = Settings().toggleSport("Football").toggleSport("rugby")
+        assertEquals(listOf("Lille", "Arsenal", "Bruges", "Toulouse"), homes(s))
+        assertEquals(listOf("Lille", "Arsenal", "Bruges"), homes(s.toggleSport("Rugby")))
+        assertEquals(5, homes(s.toggleSport("Rugby").toggleSport("Football")).size)
     }
 
-    @Test fun competitionFavouritesIgnoreTheSponsorAndTheSport() {
-        var s = Settings().toggleCompetition("Football", "Ligue 1 McDonald's")
-        assertTrue(s.isFavCompetition("Football", "Ligue 1"))
-        assertTrue(s.isFavorite(event(competition = "LIGUE 1")))
-        assertFalse("une autre discipline du même nom n'est pas concernée", s.isFavorite(event(sport = "Handball", competition = "Ligue 1")))
-        s = s.toggleCompetition("Football", "Ligue 1")
-        assertTrue(s.favCompetitions.isEmpty())
+    @Test fun checkedCompetitionsHideTheOthersOfThatSport() {
+        var s = Settings().toggleSport("Football").toggleSport("Rugby").toggleCompetition("Football", ligue1).toggleCompetition("Football", premier)
+        // Le championnat belge n'est pas coché : il disparaît ; le rugby, sans compétition cochée, reste entier.
+        assertEquals(listOf("Lille", "Arsenal", "Toulouse"), homes(s))
+        assertEquals(2, s.competitionCount("football"))
+        s = s.toggleCompetition("Football", premier)
+        assertEquals(listOf("Lille", "Toulouse"), homes(s))
+        s = s.toggleCompetition("Football", ligue1)
+        assertEquals(listOf("Lille", "Arsenal", "Bruges", "Toulouse"), homes(s))
     }
 
-    @Test fun pastEventsAreNeverShown() {
-        val s = Settings()
-        assertTrue(s.visible(listOf(event(start = now - 3 * 3_600_000)), now).isEmpty())
-        assertEquals("un match en cours reste affiché", 1, s.visible(listOf(event(start = now - 600_000)), now).size)
+    @Test fun checkingACompetitionAlsoChecksItsSport() {
+        val s = Settings().toggleCompetition("Football", ligue1)
+        assertTrue(s.isFavSport("Football"))
+        assertEquals(listOf("Lille"), homes(s))
+        assertTrue(s.isFavorite(event(competition = "LIGUE 1 McDonald's")))
+        assertFalse(s.isFavorite(event(competition = "Premier League")))
     }
 
-    @Test fun replaysAndMagazinesFollowTheSwitches() {
-        val list = listOf(event(), event(home = "Nice", replay = true), event(home = "Mag", kind = Kind.MAGAZINE))
-        assertEquals(listOf("Lille"), Settings().visible(list, now).map { it.home })
-        assertEquals(2, Settings(hideReplays = false).visible(list, now).size)
-        assertEquals(2, Settings(showMagazines = true).visible(list, now).size)
+    @Test fun uncheckingASportDropsItsCompetitions() {
+        val s = Settings().toggleCompetition("Football", ligue1).toggleCompetition("Rugby", Competitions.idOf("Rugby", "Top 14")).toggleSport("Football")
+        assertFalse(s.isFavSport("Football"))
+        assertEquals(0, s.competitionCount("Football"))
+        assertEquals(1, s.competitionCount("Rugby"))
+        assertEquals(listOf("Toulouse"), homes(s))
+    }
+
+    @Test fun sameCompetitionNameInAnotherSportIsNotAffected() {
+        val cup = Competitions.idOf("Football", "Coupe de France")
+        val s = Settings().toggleCompetition("Football", cup)
+        assertFalse(s.isFavorite(event(sport = "Basket-ball", competition = "Coupe de France")))
+        assertTrue(s.isFavorite(event(competition = "Coupe de France")))
+    }
+
+    @Test fun competitionsOutsideTheCatalogueCanBeChecked() {
+        val odd = event(home = "A", away = "B", competition = "Trophée Machin")
+        val id = Competitions.idOf("Football", "Trophée Machin")
+        val s = Settings().toggleCompetition("Football", id)
+        assertEquals(listOf("A"), s.visible(list + odd, now).map { it.home })
     }
 
     @Test fun checkedChannelsFilterTheProgramme() {
-        val list = listOf(event(channels = listOf("c1")), event(home = "Nice", channels = listOf("c2", "c3")))
-        assertEquals(2, Settings().visible(list, now).size)
-        assertEquals(listOf("Nice"), Settings().toggleChannel("c3").visible(list, now).map { it.home })
-        assertEquals(2, Settings().toggleChannel("c3").toggleChannel("c3").visible(list, now).size)
+        val two = listOf(event(channels = listOf("c1")), event(home = "Nice", channels = listOf("c2", "c3")))
+        assertEquals(2, Settings().visible(two, now).size)
+        assertEquals(listOf("Nice"), Settings().toggleChannel("c3").visible(two, now).map { it.home })
+        assertEquals(2, Settings().toggleChannel("c3").toggleChannel("c3").visible(two, now).size)
+        // Chaînes et compétitions se cumulent.
+        val s = Settings().toggleChannel("c1").toggleCompetition("Football", premier)
+        assertEquals(listOf("Arsenal"), homes(s))
     }
 
-    @Test fun checkedSportsFilterTheProgrammeButKeepFavouriteTeams() {
-        val list = listOf(event(), event(home = "Toulouse", away = "Pau", sport = "Rugby", competition = "Top 14"), event(home = "Alcaraz", away = "Sinner", sport = "Tennis", competition = "ATP Finals"))
-        assertEquals(3, Settings().visible(list, now).size)
-        val rugby = Settings().toggleSport("rugby")
-        assertEquals(listOf("Rugby"), rugby.visible(list, now).map { it.sport })
-        assertEquals(listOf("Football", "Rugby"), rugby.toggleTeam("Lyon").visible(list, now).map { it.sport })
-        assertEquals(3, rugby.toggleSport("Rugby").visible(list, now).size)
+    @Test fun pastEventsAreNeverShown() {
+        assertTrue(Settings().visible(listOf(event(start = now - 3 * 3_600_000)), now).isEmpty())
+        assertEquals("un match en cours reste affiché", 1, Settings().visible(listOf(event(start = now - 600_000)), now).size)
     }
 
-    @Test fun verifiedOnlyKeepsConfirmedLives() {
-        val list = listOf(event(verified = true), event(home = "Nice"))
-        assertEquals(listOf("Lille"), Settings(verifiedOnly = true).visible(list, now).map { it.home })
+    @Test fun replaysMagazinesAndVerifiedOnlyFollowTheSwitches() {
+        val mixed = listOf(event(verified = true), event(home = "Nice", replay = true), event(home = "Mag", kind = Kind.MAGAZINE), event(home = "Brest"))
+        assertEquals(listOf("Lille", "Brest"), Settings().visible(mixed, now).map { it.home })
+        assertEquals(3, Settings(hideReplays = false).visible(mixed, now).size)
+        assertEquals(3, Settings(showMagazines = true).visible(mixed, now).size)
+        assertEquals(listOf("Lille"), Settings(verifiedOnly = true).visible(mixed, now).map { it.home })
     }
 
-    @Test fun alertsFollowFavouritesAndManualChoices() {
+    @Test fun alertsFollowCheckedCompetitionsAndManualChoices() {
         val lille = event()
-        val nice = event(home = "Nice", away = "Lens")
-        var s = Settings().toggleTeam("Lille")
+        val arsenal = event(home = "Arsenal", away = "Chelsea", competition = "Premier League")
+        var s = Settings().toggleCompetition("Football", ligue1)
         assertTrue(s.hasAlert(lille))
-        assertFalse(s.hasAlert(nice))
+        assertFalse(s.hasAlert(arsenal))
         assertFalse("pas d'alerte pour une rediffusion", s.hasAlert(lille.copy(replay = true)))
-        s = s.toggleAlert(lille) // coupée à la main
+        s = s.toggleAlert(lille)
         assertFalse(s.hasAlert(lille))
-        s = s.toggleAlert(lille) // réactivée
+        s = s.toggleAlert(lille)
         assertTrue(s.hasAlert(lille))
-        s = s.toggleAlert(nice) // alerte sur un match non favori
-        assertTrue(s.hasAlert(nice))
-        assertFalse(s.copy(alertsEnabled = false).hasAlert(event(home = "Lille", away = "Brest")))
-        assertTrue("une alerte posée à la main survit à l'interrupteur général", s.copy(alertsEnabled = false).hasAlert(nice))
+        s = s.toggleAlert(arsenal)
+        assertTrue(s.hasAlert(arsenal))
+        assertFalse(s.copy(alertsEnabled = false).hasAlert(event(home = "Brest")))
+        assertTrue("une alerte posée à la main survit à l'interrupteur général", s.copy(alertsEnabled = false).hasAlert(arsenal))
+        assertFalse("un sport coché sans compétition ne déclenche pas d'alerte", Settings().toggleSport("Football").hasAlert(lille))
     }
 }

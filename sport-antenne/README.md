@@ -3,11 +3,13 @@
 Appli Android personnelle : les prochaines retransmissions sportives à la télé française
 et la chaîne qui les diffuse. Sans pub, sans compte, sans achat.
 
-- **À venir** : un jour par page (les jours côte à côte, on glisse pour changer), uniquement les
-  directs, avec la chaîne. Sports à cocher en haut : le choix est mémorisé et filtre le programme.
-- **Favoris** : équipes/joueurs et compétitions à cocher (avec recherche), sports à cocher.
+- **À venir** : un jour par page (jours côte à côte, le jour affiché en surbrillance), uniquement les
+  directs, avec le logo et le nom de la chaîne. Onglets de sport : seulement les sports cochés en favoris.
+- **Favoris** : sports à cocher, puis pour chaque sport ses compétitions classées par pays
+  (`core/Competitions.kt`). Sans compétition cochée, tout le sport est affiché ; sinon seules les
+  compétitions cochées. Les compétitions vues dans le guide mais hors catalogue restent cochables.
 - **Chaînes** : cocher les chaînes reçues pour masquer les autres.
-- **Alertes** : notification avant chaque diffusion d'un favori (délai réglable), ou match par match.
+- **Alertes** : notification avant chaque direct d'une compétition cochée (délai réglable), ou match par match.
 - Ajout au calendrier avec la chaîne dans le titre, widget d'accueil.
 
 ## Données et fiabilité
@@ -30,12 +32,13 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-56 tests automatiques (`./gradlew testDebugUnitTest`) :
+64 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
-  annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `SettingsTest` — favoris, filtres, alertes.
-- `AppFlowsTest` — l'appli est lancée et manipulée comme par un utilisateur : cocher/décocher équipes,
-  compétitions, sports et chaînes, alertes (programmation, délai, annulation, notification unique),
+  annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;
+  `SettingsTest` — favoris, filtres, alertes.
+- `AppFlowsTest` — l'appli est lancée et manipulée comme par un utilisateur : cocher/décocher sports,
+  compétitions et chaînes, alertes (programmation, délai, annulation, notification unique),
   calendrier, persistance, fichiers de cache corrompus.
 - `AppSmokeTest` — parcours de tous les écrans sur un guide réel (`GUIDE_GZ=…`, captures dans `SHOTS=…`).
 - `LiveSourcesTest`, `RefreshLiveTest` — vraies sources en ligne et mise à jour complète (`LIVE_SOURCES=1`).

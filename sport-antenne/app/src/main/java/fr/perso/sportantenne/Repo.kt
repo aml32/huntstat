@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import fr.perso.sportantenne.core.Catalogue
 import fr.perso.sportantenne.core.Channel
+import fr.perso.sportantenne.core.Competitions
 import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.Fixture
 import fr.perso.sportantenne.core.FixtureParsers
@@ -20,7 +21,6 @@ import fr.perso.sportantenne.core.GuideStore
 import fr.perso.sportantenne.core.Kind
 import fr.perso.sportantenne.core.Schedule
 import fr.perso.sportantenne.core.XmltvParser
-import fr.perso.sportantenne.core.competitionKey
 import fr.perso.sportantenne.core.norm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -210,14 +210,16 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
 }
 
 /**
- * Réglages persistants. Les favoris gardent le libellé affiché ; la comparaison se fait
- * sur des clés normalisées (casse, accents et sponsors ignorés).
- * Une compétition favorite est stockée sous la forme « Sport|Compétition ».
+ * Réglages persistants. Les favoris sont des sports, des compétitions et des chaînes :
+ * ils filtrent le programme.
+ *  - aucun sport coché : tous les sports ; sinon uniquement les sports cochés ;
+ *  - dans un sport, aucune compétition cochée : tout le sport ; sinon uniquement les compétitions cochées ;
+ *  - aucune chaîne cochée : toutes les chaînes ; sinon uniquement les chaînes cochées.
+ * Une compétition est stockée sous la forme « Sport|identifiant » (voir [Competitions.idOf]).
  */
 data class Settings(
     val favSports: Set<String> = emptySet(),
     val favCompetitions: Set<String> = emptySet(),
-    val favTeams: Set<String> = emptySet(),
     val myChannels: Set<String> = emptySet(),
     val hideReplays: Boolean = true,
     val showMagazines: Boolean = false,
@@ -228,22 +230,21 @@ data class Settings(
     val alertOff: Set<String> = emptySet(),
     /** N'afficher que les directs confirmés par un calendrier sportif. */
     val verifiedOnly: Boolean = false,
-    /** Bouton « Mes favoris » de l'écran À venir : mémorisé d'une ouverture à l'autre. */
-    val favoritesOnly: Boolean = false,
 ) {
     private val sportKeys by lazy { favSports.map { norm(it) }.toSet() }
-    private val competitionKeys by lazy { favCompetitions.map { competitionKeyOf(it) }.toSet() }
-    private val teamKeys by lazy { favTeams.map { norm(it) }.toSet() }
+    private val competitionsBySport: Map<String, Set<String>> by lazy {
+        favCompetitions.groupBy({ norm(it.substringBefore('|')) }, { it.substringAfter('|') }).mapValues { it.value.toSet() }
+    }
 
-    /** Équipes ou compétitions suivies. Les sports cochés, eux, filtrent le programme. */
-    val hasFavorites get() = favCompetitions.isNotEmpty() || favTeams.isNotEmpty()
+    /** Au moins une compétition cochée : elles pilotent les alertes. */
+    val hasFavorites get() = favCompetitions.isNotEmpty()
 
     fun isFavSport(sport: String) = norm(sport) in sportKeys
-    fun isFavCompetition(sport: String, competition: String) = competitionKey(sport, competition) in competitionKeys
-    fun isFavTeam(team: String) = norm(team) in teamKeys
+    fun isFavCompetition(sport: String, id: String) = competitionsBySport[norm(sport)]?.contains(id) == true
+    fun competitionCount(sport: String) = competitionsBySport[norm(sport)]?.size ?: 0
 
-    fun isFavorite(e: Event): Boolean =
-        isFavCompetition(e.sport, e.competition) || (e.hasTeams && (isFavTeam(e.home) || isFavTeam(e.away)))
+    /** La compétition de cette diffusion a été cochée explicitement. */
+    fun isFavorite(e: Event): Boolean = isFavCompetition(e.sport, Competitions.idOf(e.sport, e.competition))
 
     fun hasAlert(e: Event): Boolean =
         e.id in alertOn || (alertsEnabled && e.id !in alertOff && !e.replay && isFavorite(e))
@@ -252,41 +253,44 @@ data class Settings(
         if (hasAlert(e)) copy(alertOn = alertOn - e.id, alertOff = alertOff + e.id)
         else copy(alertOn = alertOn + e.id, alertOff = alertOff - e.id)
 
-    fun toggleSport(sport: String) =
-        copy(favSports = if (isFavSport(sport)) favSports.filter { norm(it) != norm(sport) }.toSet() else favSports + sport)
+    /** Décocher un sport retire aussi ses compétitions. */
+    fun toggleSport(sport: String): Settings =
+        if (isFavSport(sport)) copy(
+            favSports = favSports.filter { norm(it) != norm(sport) }.toSet(),
+            favCompetitions = favCompetitions.filter { norm(it.substringBefore('|')) != norm(sport) }.toSet(),
+        ) else copy(favSports = favSports + sport)
 
-    fun toggleCompetition(sport: String, competition: String): Settings {
-        val key = competitionKey(sport, competition)
-        return copy(
-            favCompetitions = if (key in competitionKeys) favCompetitions.filter { competitionKeyOf(it) != key }.toSet()
-            else favCompetitions + "$sport|$competition",
+    /** Cocher une compétition coche aussi son sport. */
+    fun toggleCompetition(sport: String, id: String): Settings =
+        if (isFavCompetition(sport, id)) copy(
+            favCompetitions = favCompetitions.filter { !(norm(it.substringBefore('|')) == norm(sport) && it.substringAfter('|') == id) }.toSet(),
+        ) else copy(
+            favCompetitions = favCompetitions + "$sport|$id",
+            favSports = if (isFavSport(sport)) favSports else favSports + sport,
         )
-    }
-
-    fun toggleTeam(team: String) =
-        copy(favTeams = if (isFavTeam(team)) favTeams.filter { norm(it) != norm(team) }.toSet() else favTeams + team)
 
     fun toggleChannel(id: String) = copy(myChannels = if (id in myChannels) myChannels - id else myChannels + id)
 
-    /**
-     * Filtre commun : à venir ou en cours, rediffusions/magazines selon réglages,
-     * uniquement les chaînes cochées (si au moins une) et les sports cochés (si au moins un).
-     * Une équipe ou compétition suivie reste visible même si son sport n'est pas coché.
-     */
+    private fun matchesFavorites(e: Event): Boolean {
+        if (favSports.isNotEmpty() && !isFavSport(e.sport)) return false
+        val chosen = competitionsBySport[norm(e.sport)]
+        return chosen.isNullOrEmpty() || Competitions.idOf(e.sport, e.competition) in chosen
+    }
+
+    /** Filtre commun : à venir ou en cours, directs, puis favoris (sports, compétitions, chaînes). */
     fun visible(events: List<Event>, now: Long): List<Event> = events.filter { e ->
         e.stop > now &&
             (showMagazines || e.kind == Kind.EVENT) &&
             (!hideReplays || !e.replay) &&
             (!verifiedOnly || e.verified) &&
             (myChannels.isEmpty() || e.channels.any { it in myChannels }) &&
-            (favSports.isEmpty() || isFavSport(e.sport) || isFavorite(e))
+            matchesFavorites(e)
     }
 
     fun save(ctx: Context) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putStringSet("favSports", favSports)
             .putStringSet("favCompetitions", favCompetitions)
-            .putStringSet("favTeams", favTeams)
             .putStringSet("myChannels", myChannels)
             .putBoolean("hideReplays", hideReplays)
             .putBoolean("showMagazines", showMagazines)
@@ -295,24 +299,22 @@ data class Settings(
             .putStringSet("alertOn", alertOn)
             .putStringSet("alertOff", alertOff)
             .putBoolean("verifiedOnly", verifiedOnly)
-            .putBoolean("favoritesOnly", favoritesOnly)
             .apply()
     }
 
     companion object {
         private const val PREFS = "settings"
 
-        fun competitionKeyOf(stored: String) = competitionKey(stored.substringBefore('|'), stored.substringAfter('|'))
-
         fun load(ctx: Context): Settings {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             fun set(k: String) = p.getStringSet(k, emptySet())?.toSet() ?: emptySet()
+            // Les favoris d'anciennes versions (noms libres, équipes) ne sont plus reconnus : on les écarte.
+            val competitions = set("favCompetitions").filter { it.substringAfter('|').let { id -> id.startsWith("c:") || id.startsWith("dyn:") } }.toSet()
             return Settings(
-                set("favSports"), set("favCompetitions"), set("favTeams"), set("myChannels"),
+                set("favSports"), competitions, set("myChannels"),
                 p.getBoolean("hideReplays", true), p.getBoolean("showMagazines", false),
                 p.getBoolean("alertsEnabled", true), p.getInt("alertMinutes", 15),
                 set("alertOn"), set("alertOff"), p.getBoolean("verifiedOnly", false),
-                p.getBoolean("favoritesOnly", false),
             )
         }
     }

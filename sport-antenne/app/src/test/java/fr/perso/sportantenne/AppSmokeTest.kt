@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
@@ -54,7 +55,6 @@ class AppSmokeTest {
             val guide = GZIPInputStream(File(path!!).inputStream()).use { XmltvParser.parse(it) }
             GuideStore.save(app.filesDir, guide)
             System.getenv("FIXTURES_TSV")?.let { File(it).copyTo(File(app.filesDir, "fixtures.tsv"), overwrite = true) }
-            Settings(favTeams = setOf("Paris-SG"), favCompetitions = setOf("Rugby|Top 14")).save(app)
             shots.mkdirs()
         }
     }
@@ -68,49 +68,53 @@ class AppSmokeTest {
     }
 
     @Test fun walkThroughEveryScreen() {
-        compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous les sports").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous").fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         shot("1-a-venir")
         compose.onNodeWithText("Demain").performClick()
         shot("2-demain")
-        compose.onNodeWithText("Auj.").performClick()
-        compose.onNodeWithText("Football").performClick()
-        compose.waitUntil(5_000) { Settings.load(app).isFavSport("Football") }
-        shot("3-football-seulement")
-        compose.onNodeWithText("Tous les sports").performClick()
-        compose.waitUntil(5_000) { Settings.load(app).favSports.isEmpty() }
+        compose.onNodeWithText("Aujourd'hui").performClick()
 
         compose.onNodeWithText("Favoris").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Paris-SG").fetchSemanticsNodes().isNotEmpty() }
-        shot("4-favoris-equipes")
-        compose.onNode(hasText("Rechercher une équipe ou un joueur")).performTextInput("lyon")
-        shot("5-favoris-recherche")
-        compose.onAllNodesWithText("Lyon").onFirst().performClick()
+        shot("3-favoris-sports")
+        compose.onNodeWithText("Football").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Ligue 1").fetchSemanticsNodes().isNotEmpty() }
+        shot("4-competitions-football")
+        compose.onNode(hasText("Rechercher une compétition ou un pays")).performTextInput("nations")
         compose.waitForIdle()
-        compose.waitUntil(5_000) { Settings.load(app).isFavTeam("Lyon") }
-        compose.onNode(hasText("Compétitions", substring = true)).performClick()
-        shot("6-favoris-competitions")
-        compose.onNode(hasText("Sports (", substring = true)).performClick()
-        shot("7-favoris-sports")
+        compose.onNodeWithText("Ligue des nations").performClick()
+        compose.onNode(hasText("nations")).performTextReplacement("qualifications can")
+        compose.waitForIdle()
+        compose.onNodeWithText("Qualifications CAN").performClick()
+        compose.waitUntil(5_000) { Settings.load(app).competitionCount("Football") == 2 }
+        compose.onNode(hasText("⚽  Football")).performClick() // bandeau de retour
+        compose.waitForIdle()
+        compose.onNodeWithText("Rugby").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Top 14").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Top 14").performClick()
+        compose.waitUntil(5_000) { Settings.load(app).isFavSport("Rugby") }
+        compose.onNode(hasText("🏉  Rugby")).performClick()
+        compose.waitForIdle()
+        shot("5-favoris-coches")
 
         compose.onNodeWithText("Chaînes").performClick()
-        shot("8-chaines")
+        shot("6-chaines")
         compose.onNodeWithText("Réglages").performClick()
-        shot("9-reglages")
+        shot("7-reglages")
 
         compose.onAllNodesWithText("À venir").onLast().performClick()
         compose.waitForIdle()
-        compose.onAllNodes(hasText("✓ Direct confirmé", substring = true)).onFirst().performClick()
+        shot("8-a-venir-filtre")
+        assertTrue("seuls les onglets des sports cochés", compose.onAllNodesWithText("Tennis").fetchSemanticsNodes().isEmpty())
+        compose.onAllNodes(hasText("Direct confirmé", substring = true)).onFirst().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Ajouter à mon calendrier").fetchSemanticsNodes().isNotEmpty() }
-        shot("10-fiche")
+        shot("9-fiche")
 
-        // Sports cochés = filtre du programme.
         val now = System.currentTimeMillis()
         val all = Repo.buildEvents(app, GuideStore.load(app.filesDir)!!)
         assertTrue("directs confirmés", all.count { it.verified } > 20)
-        val rugbyOnly = Settings(favSports = setOf("Rugby")).visible(all, now)
-        assertTrue(rugbyOnly.isNotEmpty() && rugbyOnly.all { it.sport == "Rugby" })
-
-        // Les favoris cochés donnent bien lieu à des alarmes programmées.
+        val shown = Settings.load(app).visible(all, now)
+        assertTrue(shown.isNotEmpty() && shown.all { it.sport == "Football" || it.sport == "Rugby" })
+        // Les compétitions cochées donnent bien lieu à des alarmes programmées.
         val alarms = shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms
         assertTrue("alarmes programmées: ${alarms.size}", alarms.isNotEmpty())
     }

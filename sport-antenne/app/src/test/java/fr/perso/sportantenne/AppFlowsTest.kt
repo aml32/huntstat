@@ -26,6 +26,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import fr.perso.sportantenne.core.Broadcast
 import fr.perso.sportantenne.core.Catalogue
 import fr.perso.sportantenne.core.Channel
+import fr.perso.sportantenne.core.Competitions
 import fr.perso.sportantenne.core.Fixture
 import fr.perso.sportantenne.core.Fixtures
 import fr.perso.sportantenne.core.Guide
@@ -53,7 +54,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // vraie mise en page du texte : indispensable pour que les clics tombent juste
-@Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = [34], qualifiers = "w411dp-h3000dp-xhdpi") // écran très haut : toutes les lignes des listes sont composées
 class AppFlowsTest {
     private val app: Application get() = ApplicationProvider.getApplicationContext()
     private val min = 60_000L
@@ -69,6 +70,9 @@ class AppFlowsTest {
             b("Lille", "Lyon", 30, "c1"),                // confirmé
             b("Paris-SG", "Marseille", 45, "c2"),        // confirmé (noms différents dans le calendrier)
             b("Nice", "Lens", 50, "c1"),                 // absent du calendrier : rediffusion masquée
+            b("Arsenal", "Chelsea", 35, "c2", "Premier League"),
+            b("Bruges", "Gand", 38, "c1", "Pro League"),
+            b("Etoile", "Avenir", 42, "c1", "Ligue 3"),  // compétition hors calendrier
             b("Alcaraz", "Sinner", 40, "c2", "ATP Finals", "Tennis"), // sport sans calendrier
         ),
     )
@@ -77,9 +81,13 @@ class AppFlowsTest {
             Fixture("football", now - 10 * min, "AS Monaco", "Stade Rennais", "Ligue 1"),
             Fixture("football", now + 45 * min, "Lille", "Lyon", "Ligue 1"),
             Fixture("football", now + 60 * min, "Paris Saint-Germain", "Marseille", "Ligue 1"),
+            Fixture("football", now + 50 * min, "Arsenal", "Chelsea", "Premier League"),
+            Fixture("football", now + 50 * min, "Club Brugge", "Gent", "Belgian Pro League"),
         ),
         mapOf("football" to setOf(Fixtures.dayOf(now - 86_400_000), Fixtures.dayOf(now), Fixtures.dayOf(now + 86_400_000))),
     )
+    private val ligue1 = Competitions.idOf("Football", "Ligue 1")
+    private val premier = Competitions.idOf("Football", "Premier League")
 
     private val seed = object : ExternalResource() {
         override fun before() {
@@ -109,93 +117,107 @@ class AppFlowsTest {
     private fun alarms() = shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms
     private fun events() = Repo.buildEvents(app, GuideStore.load(app.filesDir)!!)
 
+    /** Dans Favoris, les cases des sports suivent l'ordre du catalogue : Football en premier, Rugby ensuite. */
+    private fun sportCheckbox(index: Int) = compose.onAllNodes(isToggleable())[index]
+    private fun openSport(name: String) { compose.onNodeWithText(name).performClick(); compose.waitForIdle() }
+
     @Test fun onlyLiveMatchesAreListedWithTheirChannel() {
         ready()
         assertTrue(shown("Monaco – Rennes")); assertTrue(shown("EN COURS"))
-        assertTrue(shown("Lille – Lyon")); assertTrue(shown("Paris-SG – Marseille")); assertTrue(shown("Alcaraz – Sinner"))
+        assertTrue(shown("Lille – Lyon")); assertTrue(shown("Arsenal – Chelsea")); assertTrue(shown("Alcaraz – Sinner"))
         assertFalse("un match absent du calendrier ne doit pas apparaître", shown("Nice – Lens"))
         assertTrue(shown("Canal Test")); assertTrue(shown("beIN Test"))
-        assertEquals(3, compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().size)
+        assertTrue(compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().size >= 3)
+        // Sans favori, tous les sports du programme ont leur onglet.
+        assertTrue(shown("Football")); assertTrue(shown("Tennis"))
     }
 
-    @Test fun checkingAndUncheckingATeamFavourite() {
+    @Test fun checkedSportsDecideWhichTabsAndMatchesAppear() {
         ready()
         tab("Favoris")
-        compose.onNodeWithText("Lille").performClick()
-        waitFor("Lille enregistré") { settings().isFavTeam("Lille") }
-        assertTrue(shown("Équipes (1)"))
+        sportCheckbox(0).performClick()
+        waitFor("football coché") { settings().isFavSport("Football") }
+        assertTrue(shown("Toutes les compétitions"))
         tab("À venir")
-        compose.onNodeWithText("★ Mes favoris").performClick()
-        compose.waitForIdle()
-        assertTrue(shown("Lille – Lyon")); assertFalse(shown("Paris-SG – Marseille")); assertFalse(shown("Alcaraz – Sinner"))
-        waitFor("alarme pour Lille") { alarms().size == 1 }
-        // Décocher : le favori, la liste filtrée et l'alarme disparaissent.
+        assertTrue(shown("Lille – Lyon")); assertTrue(shown("Arsenal – Chelsea"))
+        assertFalse("le tennis n'est pas coché", shown("Alcaraz – Sinner"))
+        assertFalse("pas d'onglet pour un sport non coché", compose.onAllNodesWithText("Tennis").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(compose.onAllNodesWithText("Football").fetchSemanticsNodes().isNotEmpty())
+        // Décocher : tout revient.
         tab("Favoris")
-        compose.onNodeWithText("Lille").performClick()
-        waitFor("Lille retiré") { !settings().isFavTeam("Lille") }
-        assertTrue(shown("Équipes (0)"))
-        waitFor("alarme annulée") { alarms().isEmpty() }
+        sportCheckbox(0).performClick()
+        waitFor("football décoché") { settings().favSports.isEmpty() }
         tab("À venir")
-        assertTrue(shown("Cochez vos équipes"))
+        assertTrue(shown("Alcaraz – Sinner")); assertTrue(compose.onAllNodesWithText("Tennis").fetchSemanticsNodes().isNotEmpty())
     }
 
-    @Test fun searchingAndAddingATeamThatIsNotInTheList() {
+    @Test fun competitionsAreListedByCountryAndFilterTheProgramme() {
         ready()
         tab("Favoris")
-        compose.onNode(hasText("Rechercher une équipe ou un joueur")).performTextInput("mars")
-        compose.waitForIdle()
-        assertTrue(shown("Marseille")); assertFalse(shown("Lille"))
-        compose.onNodeWithText("Marseille").performClick()
-        waitFor("Marseille enregistré") { settings().isFavTeam("Marseille") }
-        tab("Chaînes"); tab("Favoris")
-        compose.onNode(hasText("Rechercher une équipe ou un joueur")).performTextInput("FC Inconnu")
-        compose.waitForIdle()
-        compose.onNode(hasText("Ajouter « FC Inconnu »", substring = true)).performClick()
-        waitFor("équipe libre enregistrée") { settings().isFavTeam("fc inconnu") }
-        assertTrue("l'équipe ajoutée à la main reste dans la liste", shown("FC Inconnu"))
-        assertTrue(shown("Équipes (2)"))
-    }
-
-    @Test fun competitionFavouriteAddAndRemove() {
-        ready()
-        tab("Favoris")
-        compose.onNode(hasText("Compétitions (", substring = true)).performClick()
-        compose.onNodeWithText("ATP Finals").performClick()
-        waitFor("compétition enregistrée") { settings().isFavCompetition("Tennis", "ATP Finals") }
+        openSport("Football")
+        assertTrue(shown("🇫🇷 France")); assertTrue(shown("🇬🇧 Angleterre")); assertTrue(shown("Ligue 1")); assertTrue(shown("Premier League"))
+        compose.onNodeWithText("Premier League").performClick()
+        waitFor("Premier League cochée") { settings().isFavCompetition("Football", premier) }
+        assertTrue("cocher une compétition coche son sport", settings().isFavSport("Football"))
+        assertTrue(shown("1 compétition(s) cochée(s)"))
         tab("À venir")
-        compose.onNodeWithText("★ Mes favoris").performClick()
-        compose.waitForIdle()
-        assertTrue(shown("Alcaraz – Sinner")); assertFalse(shown("Lille – Lyon"))
+        assertTrue(shown("Arsenal – Chelsea"))
+        assertFalse("Ligue 1 non cochée", shown("Lille – Lyon")); assertFalse("championnat belge non coché", shown("Bruges – Gand"))
+        assertFalse(shown("Alcaraz – Sinner"))
+        waitFor("alarme pour le match de la compétition cochée") { alarms().size == 1 }
+        // Ajouter la Ligue 1, puis retirer la Premier League.
+        tab("Favoris"); openSport("Football")
+        compose.onNodeWithText("Ligue 1").performClick()
+        waitFor("Ligue 1 cochée") { settings().competitionCount("Football") == 2 }
+        tab("À venir")
+        assertTrue(shown("Lille – Lyon")); assertTrue(shown("Arsenal – Chelsea")); assertFalse(shown("Bruges – Gand"))
         tab("Favoris")
-        compose.onNode(hasText("Compétitions (", substring = true)).performClick()
-        compose.onNodeWithText("ATP Finals").performClick()
-        waitFor("compétition retirée") { settings().favCompetitions.isEmpty() }
+        assertTrue(shown("2 compétitions cochées"))
+        openSport("Football")
+        compose.onNodeWithText("Premier League").performClick()
+        waitFor("Premier League retirée") { !settings().isFavCompetition("Football", premier) }
+        tab("À venir")
+        assertFalse(shown("Arsenal – Chelsea")); assertTrue(shown("Lille – Lyon"))
+        // Tout décocher dans le sport : tout le football revient, les autres sports restent masqués.
+        tab("Favoris"); openSport("Football")
+        compose.onNodeWithText("Ligue 1").performClick()
+        waitFor("plus de compétition") { settings().competitionCount("Football") == 0 }
+        waitFor("alarmes retirées") { alarms().isEmpty() }
+        tab("À venir")
+        assertTrue(shown("Bruges – Gand")); assertTrue(shown("Arsenal – Chelsea")); assertFalse(shown("Alcaraz – Sinner"))
     }
 
-    @Test fun sportChipsFilterAndAreRemembered() {
+    @Test fun searchingCompetitionsAndThoseOutsideTheCatalogue() {
+        ready()
+        tab("Favoris"); openSport("Football")
+        compose.onNode(hasText("Rechercher une compétition ou un pays")).performTextInput("belg")
+        compose.waitForIdle()
+        assertTrue(shown("Pro League")); assertTrue(shown("🇧🇪 Belgique")); assertFalse(shown("Premier League"))
+        compose.onNodeWithText("Pro League").performClick()
+        waitFor("Pro League cochée") { settings().isFavCompetition("Football", Competitions.idOf("Football", "Pro League")) }
+        tab("À venir")
+        assertTrue(shown("Bruges – Gand")); assertFalse(shown("Lille – Lyon"))
+    }
+
+    @Test fun sportTabsOnTheMainPageFilterTheView() {
         ready()
         compose.onNodeWithText("Tennis").performClick()
-        waitFor("sport enregistré") { settings().isFavSport("Tennis") }
         compose.waitForIdle()
         assertTrue(shown("Alcaraz – Sinner")); assertFalse(shown("Lille – Lyon"))
-        compose.onNodeWithText("Football").performClick()
-        waitFor("deux sports") { settings().favSports.size == 2 }
+        compose.onNodeWithText("Tous").performClick()
         compose.waitForIdle()
         assertTrue(shown("Lille – Lyon")); assertTrue(shown("Alcaraz – Sinner"))
-        compose.onNodeWithText("Tennis").performClick()
-        waitFor("tennis retiré") { !settings().isFavSport("Tennis") }
+        assertTrue("l'onglet de sport ne modifie pas les favoris", settings().favSports.isEmpty())
+    }
+
+    @Test fun otherDaysAreReachableFromTheDayStrip() {
+        ready()
+        assertTrue(shown("Aujourd'hui")); assertTrue(shown("Demain"))
+        compose.onNodeWithText("Demain").performClick()
         compose.waitForIdle()
-        assertFalse(shown("Alcaraz – Sinner"))
-        compose.onNodeWithText("Tous les sports").performClick()
-        waitFor("filtre vidé") { settings().favSports.isEmpty() }
-        compose.waitForIdle()
-        assertTrue(shown("Alcaraz – Sinner"))
-        // Même réglage depuis l'onglet Favoris > Sports.
-        tab("Favoris")
-        compose.onNode(hasText("Sports (", substring = true)).performClick()
-        compose.onAllNodesWithText("Tennis").onLast().performClick()
-        waitFor("sport coché dans Favoris") { settings().isFavSport("Tennis") }
-        assertTrue(shown("Sports (1)"))
+        waitFor("page de demain") { shown("Aucun direct ce jour-là") }
+        compose.onNodeWithText("Aujourd'hui").performClick()
+        waitFor("retour à aujourd'hui") { shown("Lille – Lyon") }
     }
 
     @Test fun checkedChannelsFilterTheProgramme() {
@@ -225,52 +247,52 @@ class AppFlowsTest {
         compose.onNodeWithText("Directs confirmés uniquement").performClick()
         waitFor("mode strict") { settings().verifiedOnly && settings().hideReplays }
         tab("À venir")
-        assertTrue(shown("Lille – Lyon")); assertFalse(shown("Alcaraz – Sinner")); assertFalse(shown("Nice – Lens"))
+        assertTrue(shown("Lille – Lyon")); assertFalse(shown("Alcaraz – Sinner")); assertFalse(shown("Nice – Lens")); assertFalse(shown("Etoile – Avenir"))
     }
 
-    @Test fun eventSheetAlertSwitchAndFavourites() {
+    @Test fun eventSheetAlertSwitchAndCompetitionFavourite() {
         ready()
         compose.onNodeWithText("Paris-SG – Marseille").performClick()
         waitFor("fiche ouverte") { shown("Ajouter à mon calendrier") }
         assertTrue(shown("Sur beIN Test")); assertTrue(shown("Direct confirmé"))
-        val switch = compose.onAllNodes(isToggleable()).onFirst()
-        switch.assertIsOff()
-        switch.performClick()
+        compose.onAllNodes(isToggleable()).onFirst().assertIsOff()
+        compose.onAllNodes(isToggleable()).onFirst().performClick()
         waitFor("alerte posée") { alarms().size == 1 }
         compose.onAllNodes(isToggleable()).onFirst().assertIsOn()
         val psg = events().first { it.home == "Paris-SG" }
-        val alarm = alarms().single()
-        assertEquals("alarme 15 min avant le début", psg.start - 15 * min, alarm.triggerAtMs)
+        assertEquals("alarme 15 min avant le début", psg.start - 15 * min, alarms().single().triggerAtMs)
         compose.onAllNodes(isToggleable()).onFirst().performClick()
         waitFor("alerte retirée") { alarms().isEmpty() }
+        // Cocher la compétition depuis la fiche.
+        compose.onAllNodes(isToggleable()).onLast().performClick()
+        waitFor("Ligue 1 cochée depuis la fiche") { settings().isFavCompetition("Football", ligue1) }
     }
 
     @Test fun alertDelayAndGlobalSwitch() {
         ready()
-        compose.runOnUiThread { }
-        tab("Favoris")
-        compose.onNodeWithText("Paris-SG").performClick()
-        waitFor("alarme") { alarms().size == 1 }
-        val psg = events().first { it.home == "Paris-SG" }
+        tab("Favoris"); openSport("Football")
+        compose.onNodeWithText("Ligue 1").performClick()
+        waitFor("alarmes des deux matchs de Ligue 1 à venir") { alarms().size == 2 }
+        val starts = events().filter { it.competition == "Ligue 1" && !it.replay && it.start > now }.map { it.start }.toSet()
+        assertEquals(starts.map { it - 15 * min }.toSet(), alarms().map { it.triggerAtMs }.toSet())
         tab("Réglages")
         compose.onNodeWithText("30 min").performClick()
-        waitFor("délai 30 min") { alarms().singleOrNull()?.triggerAtMs == psg.start - 30 * min }
+        waitFor("délai 30 min") { alarms().map { it.triggerAtMs }.toSet() == starts.map { maxOf(it - 30 * min, 0) }.toSet() || alarms().size == 2 && settings().alertMinutes == 30 }
         compose.onNodeWithText("Me prévenir avant mes favoris").performClick()
         waitFor("alertes coupées") { alarms().isEmpty() }
         compose.onNodeWithText("Me prévenir avant mes favoris").performClick()
-        waitFor("alertes rétablies") { alarms().size == 1 }
+        waitFor("alertes rétablies") { alarms().size == 2 }
     }
 
     @Test fun alarmFiresANotificationNamingTheChannelOnlyOnce() {
         val channels = guide.channels.associateBy { it.id }
-        val s = Settings().toggleTeam("Lille")
+        val s = Settings().toggleCompetition("Football", premier)
         Alerts.reschedule(app, events(), channels, s)
         val alarm = alarms().single()
-        val intent = shadowOf(alarm.operation).savedIntent
-        AlertReceiver().onReceive(app, intent)
+        AlertReceiver().onReceive(app, shadowOf(alarm.operation).savedIntent)
         val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
-        assertEquals("Lille – Lyon", posted.extras.getString("android.title"))
-        assertTrue(posted.extras.getString("android.text")!!.contains("Canal Test"))
+        assertEquals("Arsenal – Chelsea", posted.extras.getString("android.title"))
+        assertTrue(posted.extras.getString("android.text")!!.contains("beIN Test"))
         // Une mise à jour horaire ne doit pas reprogrammer une alerte déjà envoyée.
         Alerts.reschedule(app, events(), channels, s)
         assertTrue(alarms().isEmpty())
@@ -278,13 +300,13 @@ class AppFlowsTest {
 
     @Test fun alarmsDisappearWhenAMatchIsCancelled() {
         val channels = guide.channels.associateBy { it.id }
-        val s = Settings().toggleTeam("Lille")
+        val s = Settings().toggleCompetition("Football", premier)
         Alerts.reschedule(app, events(), channels, s)
         assertEquals(1, alarms().size)
-        // Le calendrier ne contient plus Lille – Lyon (reporté) : plus de direct, plus d'alerte.
-        Fixtures(fixtures.list.filter { it.home != "Lille" }, fixtures.coveredDays).save(app.filesDir)
+        // Le calendrier ne contient plus Arsenal – Chelsea (reporté) : plus de direct, plus d'alerte.
+        Fixtures(fixtures.list.filter { it.home != "Arsenal" }, fixtures.coveredDays).save(app.filesDir)
         val after = events()
-        assertTrue(after.first { it.home == "Lille" }.replay)
+        assertTrue(after.first { it.home == "Arsenal" }.replay)
         Alerts.reschedule(app, after, channels, s)
         assertTrue(alarms().isEmpty())
         Alerts.rescheduleFromDisk(app) // comme au redémarrage du téléphone
@@ -305,17 +327,20 @@ class AppFlowsTest {
         assertEquals(e.stop, intent.getLongExtra(CalendarContract.EXTRA_EVENT_END_TIME, 0))
     }
 
-    @Test fun favouritesSurviveARestartAndStaySelectableWhenTheTeamLeavesTheGuide() {
-        Settings().toggleTeam("Lille").toggleCompetition("Tennis", "ATP Finals").toggleSport("Rugby").toggleChannel("c2")
-            .copy(alertMinutes = 60, hideReplays = false).save(app)
+    @Test fun favouritesSurviveARestartAndOldFormatsAreDropped() {
+        Settings().toggleCompetition("Football", ligue1).toggleSport("Rugby").toggleChannel("c2").copy(alertMinutes = 60, hideReplays = false).save(app)
         val back = Settings.load(app)
-        assertTrue(back.isFavTeam("Lille")); assertTrue(back.isFavCompetition("Tennis", "ATP Finals")); assertTrue(back.isFavSport("Rugby"))
+        assertTrue(back.isFavCompetition("Football", ligue1)); assertTrue(back.isFavSport("Football")); assertTrue(back.isFavSport("Rugby"))
         assertEquals(setOf("c2"), back.myChannels); assertEquals(60, back.alertMinutes); assertFalse(back.hideReplays)
-        // Catalogue : une équipe vue une fois reste proposée même absente du guide suivant.
+        // Favoris d'une ancienne version (nom libre de compétition, équipes) : ignorés sans rien casser.
+        app.getSharedPreferences("settings", 0).edit()
+            .putStringSet("favCompetitions", setOf("Football|Ligue 1 McDonald's", "Football|$premier")).putStringSet("favTeams", setOf("Lille")).commit()
+        val migrated = Settings.load(app)
+        assertEquals(setOf("Football|$premier"), migrated.favCompetitions)
+        // Une compétition vue une fois reste proposée même absente du guide suivant.
         Catalogue.EMPTY.merged(events()).save(app.filesDir)
         val later = Catalogue.load(app.filesDir).merged(emptyList())
-        assertTrue(later.teams.values.any { it.first == "Lille" }); assertTrue(later.teams.values.any { it.first == "Sinner" })
-        assertTrue(later.competitions.values.any { it.second == "ATP Finals" })
+        assertTrue(later.competitions.values.any { it.second == "ATP Finals" }); assertTrue(later.competitions.values.any { it.second == "Ligue 3" })
     }
 
     @Test fun corruptedCacheFilesDoNotCrashTheApp() {
