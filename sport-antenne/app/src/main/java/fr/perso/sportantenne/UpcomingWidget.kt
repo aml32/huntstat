@@ -7,6 +7,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import fr.perso.sportantenne.core.Channel
+import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.GuideStore
 import fr.perso.sportantenne.core.Schedule
 import java.text.SimpleDateFormat
@@ -19,7 +21,11 @@ class UpcomingWidget : AppWidgetProvider() {
         val pending = goAsync()
         Thread {
             try {
-                render(context, manager, ids)
+                val guide = GuideStore.load(context.filesDir)
+                render(
+                    context, guide?.let { Schedule.build(it.broadcasts) },
+                    guide?.channels?.associateBy { it.id } ?: emptyMap(), Settings.load(context),
+                )
             } finally {
                 pending.finish()
             }
@@ -29,26 +35,17 @@ class UpcomingWidget : AppWidgetProvider() {
     companion object {
         private val ROWS = intArrayOf(R.id.row1, R.id.row2, R.id.row3, R.id.row4, R.id.row5, R.id.row6)
 
-        fun updateAll(ctx: Context) {
-            val manager = AppWidgetManager.getInstance(ctx)
+        /** [events] nul = guide jamais chargé. */
+        fun render(ctx: Context, events: List<Event>?, channels: Map<String, Channel>, settings: Settings) {
+            val manager = AppWidgetManager.getInstance(ctx) ?: return
             val ids = manager.getAppWidgetIds(ComponentName(ctx, UpcomingWidget::class.java))
-            if (ids.isNotEmpty()) render(ctx, manager, ids)
-        }
-
-        private fun render(ctx: Context, manager: AppWidgetManager, ids: IntArray) {
+            if (ids.isEmpty()) return
             val now = System.currentTimeMillis()
-            val settings = Settings.load(ctx)
-            val guide = GuideStore.load(ctx.filesDir)
-            val names = guide?.channels?.associate { it.id to it.name } ?: emptyMap()
-            val all = settings.visible(Schedule.build(guide?.broadcasts ?: emptyList()), now)
-            val favorites = all.filter { settings.isFavorite(it) }
-            val shown = (if (settings.hasFavorites) favorites else all).take(ROWS.size)
+            val all = settings.visible(events ?: emptyList(), now)
+            val shown = (if (settings.hasFavorites) all.filter { settings.isFavorite(it) } else all).take(ROWS.size)
 
             val views = RemoteViews(ctx.packageName, R.layout.widget)
-            views.setTextViewText(
-                R.id.widget_title,
-                if (settings.hasFavorites) "MES FAVORIS À VENIR" else "À VENIR À LA TÉLÉ",
-            )
+            views.setTextViewText(R.id.widget_title, if (settings.hasFavorites) "MES FAVORIS À VENIR" else "À VENIR À LA TÉLÉ")
             val day = SimpleDateFormat("EEE", Locale.FRENCH)
             val hour = SimpleDateFormat("HH:mm", Locale.FRENCH)
             val today = day.format(Date(now))
@@ -57,7 +54,7 @@ class UpcomingWidget : AppWidgetProvider() {
                 views.setTextViewText(
                     id,
                     when {
-                        e == null && i == 0 -> if (guide == null) "Ouvrez l'appli pour charger le guide" else "Rien à venir pour l'instant"
+                        e == null && i == 0 -> if (events == null) "Ouvrez l'appli pour charger le programme" else "Rien à venir pour l'instant"
                         e == null -> ""
                         else -> {
                             val d = Date(e.start)
@@ -66,7 +63,7 @@ class UpcomingWidget : AppWidgetProvider() {
                                 day.format(d) == today && e.start - now < 86_400_000L -> hour.format(d)
                                 else -> "${day.format(d)} ${hour.format(d)}"
                             }
-                            "$whenText  ${e.headline} · ${e.channels.joinToString(", ") { names[it] ?: it }}"
+                            "$whenText  ${e.headline} · ${e.channels.joinToString(", ") { channels[it]?.name ?: it }}"
                         }
                     },
                 )

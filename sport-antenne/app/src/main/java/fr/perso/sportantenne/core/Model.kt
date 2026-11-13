@@ -40,6 +40,8 @@ data class Event(
 ) {
     val hasTeams get() = home.isNotBlank() && away.isNotBlank()
     val headline get() = if (hasTeams) "$home – $away" else title
+    /** Identifiant stable d'une diffusion précise (alertes). */
+    val id get() = "$key@$start"
 }
 
 private val DIACRITICS = Regex("\\p{Mn}+")
@@ -60,6 +62,26 @@ fun competitionKey(sport: String, competition: String): String =
 
 object Schedule {
     private const val SIMULTANEOUS_MS = 40 * 60 * 1000L
+    private val PARIS = java.util.TimeZone.getTimeZone("Europe/Paris")
+
+    // Sports collectifs joués en Europe : jamais de direct entre 0h45 et 9h30 (heure de Paris)…
+    private val EUROPEAN_HOURS = setOf("football", "rugby", "handball", "volley ball", "basket ball", "hockey", "futsal")
+    // …sauf pour les compétitions disputées sur d'autres fuseaux.
+    private val OVERSEAS = Regex(
+        "\\b(nba|wnba|ncaa|nfl|nhl|mlb|mls|bresil|brazil|brasil|argentin|libertadores|sudamericana|copa|mexi|liga mx" +
+            "|concacaf|gold cup|amerique|americ|etats unis|usa|canada|australi|zeland|pacifi|super rugby|rugby championship" +
+            "|bledisloe|nrl|japon|j league|chine|coree|asie|asian|asiatique|afc|saoudi|saudi|mondial|coupe du monde|world cup" +
+            "|monde|intercontinental|olympi|tournee|test match)\\b",
+    )
+
+    /** Diffusion nocturne d'un match forcément joué plus tôt : rediffusion probable. */
+    private fun nightReplay(b: Broadcast): Boolean {
+        if (norm(b.sport) !in EUROPEAN_HOURS) return false
+        if (OVERSEAS.containsMatchIn(norm(b.competition + " " + b.home + " " + b.away + " " + b.detail))) return false
+        val cal = java.util.Calendar.getInstance(PARIS).apply { timeInMillis = b.start }
+        val minutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        return minutes in 45..570
+    }
 
     private fun keyOf(b: Broadcast): String =
         if (b.home.isNotBlank() && b.away.isNotBlank()) "${norm(b.sport)}|${norm(b.home)}|${norm(b.away)}"
@@ -81,7 +103,7 @@ object Schedule {
                 out[idx] = e.copy(
                     stop = maxOf(e.stop, b.stop),
                     channels = if (b.channelId in e.channels) e.channels else e.channels + b.channelId,
-                    replay = e.replay && b.previouslyShown,
+                    replay = e.replay && (b.previouslyShown || nightReplay(b)),
                     desc = e.desc.ifBlank { b.desc },
                 )
             } else {
@@ -90,7 +112,7 @@ object Schedule {
                     key = key, start = b.start, stop = b.stop, sport = b.sport,
                     competition = b.competition, title = b.title, home = b.home, away = b.away,
                     detail = b.detail, desc = b.desc, kind = b.kind,
-                    replay = b.previouslyShown || (teams && idx != null),
+                    replay = b.previouslyShown || (teams && idx != null) || (teams && nightReplay(b)),
                     channels = listOf(b.channelId),
                 )
             }

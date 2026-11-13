@@ -1,15 +1,13 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package fr.perso.sportantenne.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,12 +21,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -45,13 +45,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,7 +66,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -74,7 +76,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import fr.perso.sportantenne.AppState
-import fr.perso.sportantenne.Settings
 import fr.perso.sportantenne.core.Channel
 import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.Kind
@@ -86,41 +87,32 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private val Gold = Color(0xFFF2C14E)
-private val Live = Color(0xFFFF6B5E)
-
-private val Scheme = darkColorScheme(
-    primary = Color(0xFF7CE0A3),
-    onPrimary = Color(0xFF00391F),
-    primaryContainer = Color(0xFF1D4A33),
-    onPrimaryContainer = Color(0xFFB9F5CF),
-    secondary = Gold,
-    secondaryContainer = Color(0xFF23352B),
-    onSecondaryContainer = Color(0xFFDDEBE2),
-    background = Color(0xFF0E1512),
-    onBackground = Color(0xFFE6EFE9),
-    surface = Color(0xFF0E1512),
-    onSurface = Color(0xFFE6EFE9),
-    surfaceVariant = Color(0xFF1A2620),
-    onSurfaceVariant = Color(0xFF9DB0A5),
-    surfaceContainer = Color(0xFF131C17),
-    surfaceContainerLow = Color(0xFF16201B),
-    surfaceContainerHigh = Color(0xFF1A2620),
-    outline = Color(0xFF3A4A41),
-    outlineVariant = Color(0xFF25332B),
+private val LiveRed = Color(0xFFD32F2F)
+private val LightScheme = lightColorScheme(
+    primary = Color(0xFF1565C0), onPrimary = Color.White,
+    primaryContainer = Color(0xFFD6E4F7), onPrimaryContainer = Color(0xFF0B2E5C),
+    secondaryContainer = Color(0xFFD6E4F7), onSecondaryContainer = Color(0xFF0B2E5C),
+    background = Color.White, surface = Color.White,
+    surfaceContainer = Color(0xFFF3F4F6), surfaceVariant = Color(0xFFEEF0F3),
+)
+private val DarkScheme = darkColorScheme(
+    primary = Color(0xFF90CAF9), onPrimary = Color(0xFF0B2E5C),
+    secondaryContainer = Color(0xFF1E3A5F), onSecondaryContainer = Color(0xFFD6E4F7),
+    background = Color(0xFF121212), surface = Color(0xFF121212),
+    surfaceContainer = Color(0xFF1C1C1C), surfaceVariant = Color(0xFF242424),
 )
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    UPCOMING("À venir", Icons.Filled.Home),
+private enum class Screen(val label: String, val icon: ImageVector) {
+    PROGRAMME("Programme", Icons.Filled.Home),
     FAVORITES("Favoris", Icons.Filled.Star),
-    EXPLORE("Explorer", Icons.Filled.Search),
+    CHANNELS("Chaînes", Icons.Filled.PlayArrow),
     SETTINGS("Réglages", Icons.Filled.Settings),
 }
 
 @Composable
 fun SportAntenneApp(state: AppState = viewModel()) {
-    MaterialTheme(colorScheme = Scheme) {
-        var tab by rememberSaveable { mutableIntStateOf(0) }
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkScheme else LightScheme) {
+        var screen by rememberSaveable { mutableIntStateOf(0) }
         var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
         LaunchedEffect(Unit) {
             while (true) {
@@ -135,38 +127,20 @@ fun SportAntenneApp(state: AppState = viewModel()) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = {
-                        Column {
-                            Text("Sport Antenne", fontWeight = FontWeight.Bold)
-                            Text(
-                                when {
-                                    state.loading -> "Mise à jour du guide…"
-                                    state.lastUpdate == 0L -> "Guide non chargé"
-                                    else -> "Guide du " + SimpleDateFormat("d MMM à HH:mm", Locale.FRENCH).format(Date(state.lastUpdate))
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
+                    title = { Text(Screen.entries[screen].label, fontWeight = FontWeight.Bold) },
                     actions = {
                         if (state.loading) {
                             CircularProgressIndicator(Modifier.padding(end = 16.dp).size(22.dp), strokeWidth = 2.dp)
                         } else {
-                            IconButton(onClick = state::refresh) { Icon(Icons.Filled.Refresh, "Mettre à jour") }
+                            IconButton(onClick = state::refresh) { Icon(Icons.Filled.Refresh, "Mettre à jour le programme") }
                         }
                     },
                 )
             },
             bottomBar = {
                 NavigationBar {
-                    Tab.entries.forEachIndexed { i, t ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Icon(t.icon, null) },
-                            label = { Text(t.label) },
-                        )
+                    Screen.entries.forEachIndexed { i, s ->
+                        NavigationBarItem(screen == i, { screen = i }, { Icon(s.icon, null) }, label = { Text(s.label) })
                     }
                 }
             },
@@ -174,204 +148,231 @@ fun SportAntenneApp(state: AppState = viewModel()) {
             Column(Modifier.padding(padding).fillMaxSize()) {
                 state.error?.let {
                     Text(
-                        it,
-                        Modifier.fillMaxWidth().background(Color(0xFF4A1F1B)).padding(12.dp),
-                        color = Color(0xFFFFDAD5),
-                        style = MaterialTheme.typography.bodySmall,
+                        it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                when (Tab.entries[tab]) {
-                    Tab.UPCOMING -> UpcomingScreen(visible, state, now) { selected = it }
-                    Tab.FAVORITES -> FavoritesScreen(visible, state, now) { selected = it }
-                    Tab.EXPLORE -> ExploreScreen(visible, state, now) { selected = it }
-                    Tab.SETTINGS -> SettingsScreen(state)
+                when (Screen.entries[screen]) {
+                    Screen.PROGRAMME -> ProgrammeScreen(visible, state, now) { selected = it }
+                    Screen.FAVORITES -> FavoritesScreen(state)
+                    Screen.CHANNELS -> ChannelsScreen(state)
+                    Screen.SETTINGS -> SettingsScreen(state)
                 }
             }
         }
+        // La fiche suit l'état courant (favoris, alerte) de l'événement ouvert.
         selected?.let { EventSheet(it, state, now) { selected = null } }
     }
 }
 
-// ───────────────────────────── Écrans ─────────────────────────────
+// ───────────────────────────── Programme ─────────────────────────────
+
+private const val ALL = 0
+private const val MINE = 1
+private const val NOW = 2
 
 @Composable
-private fun UpcomingScreen(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
+private fun ProgrammeScreen(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
+    var mode by rememberSaveable { mutableIntStateOf(ALL) }
     var sport by rememberSaveable { mutableStateOf<String?>(null) }
-    val sports = remember(events) { events.groupingBy { it.sport }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }
-    if (sport != null && sport !in sports) sport = null
-    Column {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item { FilterChip(sport == null, { sport = null }, { Text("Tous") }) }
-            items(sports) { s -> FilterChip(sport == s, { sport = if (sport == s) null else s }, { Text(s) }) }
-        }
-        EventList(
-            if (sport == null) events else events.filter { it.sport == sport },
-            state, now, onOpen,
-            empty = if (state.loading) "Chargement du guide TV…" else "Aucun événement à venir. Touchez ↻ pour mettre à jour.",
-        )
-    }
-}
-
-@Composable
-private fun FavoritesScreen(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
     val settings = state.settings
-    val mine = remember(events, settings) { events.filter { settings.isFavorite(it) } }
-    EventList(
-        mine, state, now, onOpen,
-        empty = if (settings.hasFavorites) "Aucun de vos favoris n'est programmé dans les prochains jours."
-        else "Pas encore de favoris.\n\nTouchez un match puis ★ sur une équipe, une compétition ou un sport — " +
-            "ou parcourez l'onglet Explorer.",
-    )
+    val scoped = remember(events, mode, settings, now) {
+        when (mode) {
+            MINE -> events.filter { settings.isFavorite(it) }
+            NOW -> events.filter { it.start <= now }
+            else -> events
+        }
+    }
+    val sports = remember(scoped) { scoped.groupingBy { it.sport }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }
+    val shown = if (sport != null && sport in sports) scoped.filter { it.sport == sport } else scoped
+
+    Column {
+        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(mode == ALL, { mode = ALL }, { Text("Tout") })
+            FilterChip(mode == MINE, { mode = MINE }, { Text("Mes favoris") })
+            FilterChip(mode == NOW, { mode = NOW }, { Text("En ce moment") })
+        }
+        if (sports.size > 1) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { FilterChip(sport == null || sport !in sports, { sport = null }, { Text("Tous les sports") }) }
+                items(sports) { s -> FilterChip(sport == s, { sport = if (sport == s) null else s }, { Text(s) }) }
+            }
+        }
+        HorizontalDivider()
+        if (shown.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    when {
+                        state.loading -> "Chargement du programme…"
+                        mode == MINE && !settings.hasFavorites -> "Cochez vos équipes et compétitions dans l'onglet Favoris."
+                        mode == MINE -> "Aucun de vos favoris n'est programmé dans les prochains jours."
+                        mode == NOW -> "Rien en ce moment."
+                        else -> "Aucun programme. Touchez ↻ pour mettre à jour."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            EventList(shown, state, now, onOpen)
+        }
+    }
 }
 
 @Composable
-private fun EventList(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit, empty: String) {
-    if (events.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-            Text(empty, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        return
-    }
-    val rows = remember(events) {
+private fun EventList(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
+    val rows = remember(events, now) {
         val out = ArrayList<Any>()
         var last = ""
         for (e in events) {
-            val d = dayLabel(e.start, now)
-            if (d != last && e.start > now) { out += d; last = d }
-            else if (e.start <= now && last.isEmpty()) { out += "En ce moment"; last = "En ce moment" }
+            val label = if (e.start <= now) "En ce moment" else dayLabel(e.start, now)
+            if (label != last) { out += label; last = label }
             out += e
         }
         out
     }
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn {
         items(rows) { row ->
             when (row) {
                 is String -> Text(
-                    row.uppercase(),
-                    Modifier.padding(top = 10.dp, start = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
+                    row, Modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
                 )
-                is Event -> EventCard(row, state, now, onOpen)
-            }
-        }
-    }
-}
-
-@Composable
-private fun EventCard(e: Event, state: AppState, now: Long, onOpen: (Event) -> Unit) {
-    val live = e.start <= now
-    Surface(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onOpen(e) },
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(14.dp),
-    ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(hour(e.start), fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                if (live) Badge("EN COURS", Live) else if (e.replay) Badge("REDIFF", MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(e.headline, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(
-                    subtitle(e),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    e.channels.take(4).forEach { ChannelPill(state.channels[it], it) }
-                    if (e.channels.size > 4) Text("+${e.channels.size - 4}", style = MaterialTheme.typography.labelSmall)
+                is Event -> {
+                    EventRow(row, state, now, onOpen)
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
                 }
             }
-            if (state.settings.isFavorite(e)) Icon(Icons.Filled.Star, "Favori", Modifier.size(18.dp), tint = Gold)
         }
     }
 }
 
 @Composable
-private fun Badge(text: String, color: Color) {
-    Text(text, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-}
-
-@Composable
-private fun ChannelPill(channel: Channel?, id: String) {
+private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Unit) {
+    val live = e.start <= now
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 6.dp, vertical = 3.dp),
+        Modifier.fillMaxWidth().clickable { onOpen(e) }.padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!channel?.logo.isNullOrEmpty()) {
-            AsyncImage(channel?.logo, null, Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)))
-            Spacer(Modifier.width(5.dp))
+        Column(Modifier.width(56.dp)) {
+            Text(hour(e.start), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            when {
+                live -> Text("EN COURS", color = LiveRed, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                e.replay -> Text("REDIFF", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
         }
-        Text(channel?.name ?: id, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+            Text(e.headline, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                subtitle(e), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                e.channels.joinToString(", ") { state.channels[it]?.name ?: it },
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val logo = state.channels[e.channels.first()]?.logo
+        if (!logo.isNullOrEmpty()) AsyncImage(logo, null, Modifier.size(36.dp))
+        if (state.settings.hasAlert(e) && !live) {
+            Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.padding(start = 6.dp).size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 
-// ───────────────────────────── Explorer ─────────────────────────────
+// ───────────────────────────── Favoris à cocher ─────────────────────────────
+
+private class Choice(val label: String, val note: String, val checked: Boolean, val toggle: () -> Unit)
 
 @Composable
-private fun ExploreScreen(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
-    var query by rememberSaveable { mutableStateOf("") }
-    var sport by rememberSaveable { mutableStateOf<String?>(null) }
-    var competition by rememberSaveable { mutableStateOf<String?>(null) }
+private fun FavoritesScreen(state: AppState) {
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     val settings = state.settings
-    BackHandler(enabled = sport != null || query.isNotEmpty()) {
-        when {
-            query.isNotEmpty() -> query = ""
-            competition != null -> competition = null
-            else -> sport = null
+    val catalogue = state.catalogue
+    Column {
+        TabRow(tab) {
+            Tab(tab == 0, { tab = 0 }, text = { Text("Équipes (${settings.favTeams.size})") })
+            Tab(tab == 1, { tab = 1 }, text = { Text("Compétitions (${settings.favCompetitions.size})") })
+            Tab(tab == 2, { tab = 2 }, text = { Text("Sports (${settings.favSports.size})") })
         }
+        when (tab) {
+            0 -> {
+                val known = catalogue.teams
+                val choices = remember(known, settings.favTeams) {
+                    val extra = settings.favTeams.filter { norm(it) !in known }.map { it to "" }
+                    (known.values + extra).map { (name, sport) ->
+                        Choice(name, sport, settings.isFavTeam(name)) { state.update { it.toggleTeam(name) } }
+                    }
+                }
+                Checklist(choices, "Rechercher une équipe ou un joueur") { typed -> state.update { it.toggleTeam(typed) } }
+            }
+            1 -> {
+                val known = catalogue.competitions
+                val choices = remember(known, settings.favCompetitions) {
+                    val extra = settings.favCompetitions
+                        .filter { competitionKey(it.substringBefore('|'), it.substringAfter('|')) !in known }
+                        .map { it.substringBefore('|') to it.substringAfter('|') }
+                    (known.values + extra).map { (sport, name) ->
+                        Choice(name, sport, settings.isFavCompetition(sport, name)) { state.update { it.toggleCompetition(sport, name) } }
+                    }
+                }
+                Checklist(choices, "Rechercher une compétition", null)
+            }
+            else -> {
+                val choices = remember(state.events, known(catalogue), settings.favSports) {
+                    val names = (catalogue.competitions.values.map { it.first } + catalogue.teams.values.map { it.second } +
+                        state.events.filter { it.kind == Kind.EVENT }.map { it.sport } + settings.favSports)
+                        .filter { it.isNotBlank() }.distinctBy { norm(it) }
+                    names.map { s -> Choice(s, "", settings.isFavSport(s)) { state.update { it.toggleSport(s) } } }
+                }
+                Text(
+                    if (settings.favSports.isEmpty()) "Aucun sport coché : tous les sports sont affichés. Cochez ceux qui vous intéressent pour masquer les autres."
+                    else "${settings.favSports.size} sports cochés : seul leur programme est affiché (plus vos équipes et compétitions).",
+                    Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Checklist(choices, "Rechercher un sport", null)
+            }
+        }
+    }
+}
+
+private fun known(c: fr.perso.sportantenne.core.Catalogue) = c.teams.size + c.competitions.size
+
+/** Liste à cocher avec recherche : les éléments cochés en premier, puis l'ordre alphabétique. */
+@Composable
+private fun Checklist(choices: List<Choice>, hint: String, onAdd: ((String) -> Unit)?) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val q = norm(query)
+    val shown = remember(choices, q) {
+        choices.filter { q.isEmpty() || norm(it.label).contains(q) || norm(it.note).contains(q) }
+            .sortedWith(compareBy<Choice> { !it.checked }.thenBy { norm(it.label) })
     }
     Column {
         OutlinedTextField(
-            query, { query = it },
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            placeholder = { Text("Équipe, joueur, compétition…") },
+            query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            placeholder = { Text(hint) }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) },
-            singleLine = true,
+            trailingIcon = { if (query.isNotEmpty()) IconButton({ query = "" }) { Icon(Icons.Filled.Clear, "Effacer") } },
         )
-        val q = norm(query)
-        when {
-            q.length >= 2 -> SearchResults(events, q, state, now, onOpen)
-            sport == null -> {
-                val sports = remember(events) { events.groupingBy { it.sport }.eachCount().entries.sortedByDescending { it.value } }
-                LazyColumn {
-                    item { SectionTitle("Sports") }
-                    items(sports) { (name, count) ->
-                        StarRow(name, "$count à venir", settings.isFavSport(name), { state.update { it.toggleSport(name) } }) { sport = name }
-                    }
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(shown, key = { it.label + "|" + it.note }) { c -> CheckRow(c.label, c.note, c.checked, null, c.toggle) }
+            val typed = query.trim()
+            if (onAdd != null && typed.length >= 2 && choices.none { norm(it.label) == q }) {
+                item {
+                    Text(
+                        "Ajouter « $typed » à mes favoris",
+                        Modifier.fillMaxWidth().clickable { onAdd(typed); query = "" }.padding(16.dp),
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
-            competition == null -> {
-                val s = sport!!
-                val comps = remember(events, s) {
-                    events.filter { it.sport == s }.groupBy { competitionKey(it.sport, it.competition) }
-                        .values.sortedByDescending { it.size }
-                }
-                LazyColumn {
-                    item { BackTitle(s) { sport = null } }
-                    items(comps) { list ->
-                        val name = list.first().competition
-                        StarRow(
-                            name, "${list.size} à venir", settings.isFavCompetition(s, name),
-                            { state.update { it.toggleCompetition(s, name) } },
-                        ) { competition = name }
-                    }
-                }
-            }
-            else -> {
-                val key = competitionKey(sport!!, competition!!)
-                Column {
-                    BackTitle("$sport · $competition") { competition = null }
-                    EventList(events.filter { competitionKey(it.sport, it.competition) == key }, state, now, onOpen, "Rien à venir.")
+            if (shown.isEmpty() && (onAdd == null || query.trim().length < 2)) {
+                item {
+                    Text(
+                        if (choices.isEmpty()) "La liste se remplit au premier chargement du programme." else "Aucun résultat.",
+                        Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -379,129 +380,106 @@ private fun ExploreScreen(events: List<Event>, state: AppState, now: Long, onOpe
 }
 
 @Composable
-private fun SearchResults(events: List<Event>, q: String, state: AppState, now: Long, onOpen: (Event) -> Unit) {
+private fun CheckRow(label: String, note: String, checked: Boolean, logo: String?, onToggle: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked, { onToggle() })
+        if (!logo.isNullOrEmpty()) {
+            AsyncImage(logo, null, Modifier.size(28.dp))
+            Spacer(Modifier.width(10.dp))
+        }
+        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (note.isNotEmpty()) Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+// ───────────────────────────── Chaînes ─────────────────────────────
+
+@Composable
+private fun ChannelsScreen(state: AppState) {
     val settings = state.settings
-    val teams = remember(events, q) {
-        events.filter { it.hasTeams }.flatMap { listOf(it.home, it.away) }
-            .filter { norm(it).contains(q) }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(12)
+    var query by rememberSaveable { mutableStateOf("") }
+    val all = remember(state.events, state.channels) {
+        state.events.filter { it.kind == Kind.EVENT }.flatMap { it.channels }.groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }.map { state.channels[it.key] ?: Channel(it.key, it.key, "") }
     }
-    val comps = remember(events, q) {
-        events.filter { norm(it.competition).contains(q) }.groupBy { competitionKey(it.sport, it.competition) }
-            .values.sortedByDescending { it.size }.take(8)
-    }
-    val matches = remember(events, q) {
-        events.filter { norm(it.headline).contains(q) || norm(it.competition).contains(q) || norm(it.detail).contains(q) }.take(60)
-    }
-    LazyColumn(contentPadding = PaddingValues(bottom = 12.dp)) {
-        if (teams.isNotEmpty()) item { SectionTitle("Équipes et joueurs") }
-        items(teams) { (name, count) ->
-            StarRow(name, "$count à venir", settings.isFavTeam(name), { state.update { it.toggleTeam(name) } }, null)
-        }
-        if (comps.isNotEmpty()) item { SectionTitle("Compétitions") }
-        items(comps) { list ->
-            val e = list.first()
-            StarRow(
-                e.competition, "${e.sport} · ${list.size} à venir", settings.isFavCompetition(e.sport, e.competition),
-                { state.update { it.toggleCompetition(e.sport, e.competition) } }, null,
-            )
-        }
-        item { SectionTitle(if (matches.isEmpty()) "Aucune diffusion trouvée" else "Diffusions") }
-        items(matches) { e ->
-            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { EventCard(e, state, now, onOpen) }
-        }
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text.uppercase(), Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-    )
-}
-
-@Composable
-private fun BackTitle(text: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onBack).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Filled.ArrowBack, "Retour", Modifier.padding(8.dp))
-        Text(text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-    }
-}
-
-@Composable
-private fun StarRow(title: String, subtitle: String, starred: Boolean, onStar: () -> Unit, onClick: (() -> Unit)?) {
-    Row(
-        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(start = 16.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onStar) {
-            Icon(
-                Icons.Filled.Star, if (starred) "Retirer des favoris" else "Ajouter aux favoris",
-                tint = if (starred) Gold else MaterialTheme.colorScheme.outline,
-            )
+    val q = norm(query)
+    val shown = if (q.isEmpty()) all else all.filter { norm(it.name).contains(q) }
+    Column {
+        Text(
+            if (settings.myChannels.isEmpty()) "Aucune chaîne cochée : tout le programme est affiché. Cochez les chaînes que vous recevez pour masquer les autres."
+            else "${settings.myChannels.size} chaînes cochées : seul leur programme est affiché.",
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            placeholder = { Text("Rechercher une chaîne") }, singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+        )
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(shown, key = { it.id }) { c ->
+                CheckRow(c.name, "", c.id in settings.myChannels, c.logo) { state.update { it.toggleChannel(c.id) } }
+            }
         }
     }
 }
 
 // ───────────────────────────── Réglages ─────────────────────────────
 
+private val DELAYS = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h")
+
 @Composable
 private fun SettingsScreen(state: AppState) {
-    var pickingChannels by rememberSaveable { mutableStateOf(false) }
     val settings = state.settings
-    if (pickingChannels) {
-        BackHandler { pickingChannels = false }
-        ChannelPicker(state) { pickingChannels = false }
-        return
-    }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        SectionTitle("Affichage")
-        SwitchRow("Masquer les rediffusions", "Détection automatique : un match déjà diffusé plus tôt est considéré comme une rediffusion.", settings.hideReplays) { v ->
+        SectionTitle("Alertes")
+        SwitchRow("Me prévenir avant mes favoris", "Notification avant chaque diffusion d'une équipe ou d'une compétition cochée.", settings.alertsEnabled) { v ->
+            state.update { it.copy(alertsEnabled = v) }
+        }
+        Text("Délai avant le début", Modifier.padding(start = 16.dp, top = 4.dp))
+        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            DELAYS.forEach { (minutes, label) ->
+                FilterChip(settings.alertMinutes == minutes, { state.update { it.copy(alertMinutes = minutes) } }, { Text(label) })
+            }
+        }
+        SectionTitle("Programme")
+        SwitchRow("Masquer les rediffusions", "Un match déjà diffusé, ou diffusé en pleine nuit, est considéré comme une rediffusion.", settings.hideReplays) { v ->
             state.update { it.copy(hideReplays = v) }
         }
-        SwitchRow("Afficher les magazines", "Émissions, documentaires et journaux sportifs en plus des compétitions.", settings.showMagazines) { v ->
+        SwitchRow("Afficher les magazines", "Émissions, documentaires et journaux sportifs.", settings.showMagazines) { v ->
             state.update { it.copy(showMagazines = v) }
         }
-        SectionTitle("Mes chaînes")
-        Row(Modifier.fillMaxWidth().clickable { pickingChannels = true }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(if (settings.myChannels.isEmpty()) "Toutes les chaînes" else "${settings.myChannels.size} chaînes sélectionnées")
-                Text(
-                    "Choisissez les chaînes que vous recevez pour masquer le reste.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text("Choisir", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-        }
-        SectionTitle("Mes favoris")
-        if (!settings.hasFavorites) {
-            Text("Aucun favori pour l'instant.", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        settings.favTeams.sorted().forEach { t -> StarRow(t, "Équipe / joueur", true, { state.update { it.toggleTeam(t) } }, null) }
-        settings.favCompetitions.sorted().forEach { c ->
-            val sport = c.substringBefore('|')
-            val name = c.substringAfter('|')
-            StarRow(name, "Compétition · $sport", true, { state.update { it.toggleCompetition(sport, name) } }, null)
-        }
-        settings.favSports.sorted().forEach { s -> StarRow(s, "Sport", true, { state.update { it.toggleSport(s) } }, null) }
-        HorizontalDivider(Modifier.padding(vertical = 12.dp))
+        SectionTitle("Mise à jour")
         Text(
-            "Programmes : guide XMLTV public xmltvfr.fr, mis à jour automatiquement toutes les 6 heures. " +
-                "Aucune publicité, aucun compte, aucun achat.",
-            Modifier.padding(horizontal = 16.dp),
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            (if (state.lastUpdate == 0L) "Programme jamais chargé."
+            else "Dernière mise à jour : " + SimpleDateFormat("EEEE d MMMM 'à' HH:mm", Locale.FRENCH).format(Date(state.lastUpdate)) + ".") +
+                "\nLe programme se met à jour tout seul, à l'ouverture et environ toutes les 4 heures.",
+            Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = state::refresh, enabled = !state.loading, modifier = Modifier.padding(16.dp)) {
+            Text(if (state.loading) "Mise à jour…" else "Mettre à jour maintenant")
+        }
+        Text(
+            "Source : guide TV public xmltvfr.fr. Sans publicité, sans compte.",
+            Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 @Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text, Modifier.padding(start = 16.dp, top = 18.dp, bottom = 4.dp),
+        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+    )
+}
+
+@Composable
 private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -510,86 +488,53 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
     }
 }
 
-@Composable
-private fun ChannelPicker(state: AppState, onBack: () -> Unit) {
-    val settings = state.settings
-    val list = remember(state.events, state.channels) {
-        state.events.filter { it.kind == Kind.EVENT }.flatMap { it.channels }.groupingBy { it }.eachCount()
-            .entries.sortedByDescending { it.value }.map { state.channels[it.key] ?: Channel(it.key, it.key, "") }
-    }
-    Column {
-        BackTitle("Mes chaînes (${if (settings.myChannels.isEmpty()) "toutes" else settings.myChannels.size.toString()})", onBack)
-        LazyColumn {
-            items(list, key = { it.id }) { c ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { state.update { it.toggleChannel(c.id) } }.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(c.id in settings.myChannels, { state.update { it.toggleChannel(c.id) } })
-                    if (c.logo.isNotEmpty()) {
-                        AsyncImage(c.logo, null, Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)))
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    Text(c.name)
-                }
-            }
-        }
-    }
-}
-
-// ───────────────────────────── Fiche événement ─────────────────────────────
+// ───────────────────────────── Fiche d'un événement ─────────────────────────────
 
 @Composable
 private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val settings = state.settings
+    val names = e.channels.joinToString(", ") { state.channels[it]?.name ?: it }
     ModalBottomSheet(onDismissRequest = onClose) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
-            Text(subtitle(e), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(e.headline, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                (if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " · " + hour(e.start) + " – " + hour(e.stop) +
-                    if (e.replay) " · Rediffusion" else "",
-                color = if (e.start <= now) Live else MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(12.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                e.channels.forEach { ChannelPill(state.channels[it], it) }
-            }
-            if (e.desc.isNotBlank()) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                Text(e.headline, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(subtitle(e), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    (if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +
+                        if (e.replay) " · Rediffusion" else "",
+                    fontWeight = FontWeight.SemiBold, color = if (e.start <= now) LiveRed else MaterialTheme.colorScheme.onSurface,
+                )
+                Text("Sur $names", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                if (e.desc.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(e.desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(12.dp))
-                Text(e.desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = { addToCalendar(ctx, e, state.channels) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.DateRange, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ajouter à mon calendrier")
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            SectionLabel("Suivre")
+            if (e.start > now) {
+                SwitchRow("M'alerter avant le début", "Notification ${DELAYS.firstOrNull { it.first == settings.alertMinutes }?.second ?: "${settings.alertMinutes} min"} avant, avec la chaîne.", settings.hasAlert(e)) {
+                    state.update { it.toggleAlert(e) }
+                }
+            }
+            SectionTitle("Mes favoris")
             if (e.hasTeams) {
-                StarRow(e.home, "Équipe / joueur", settings.isFavTeam(e.home), { state.update { it.toggleTeam(e.home) } }, null)
-                StarRow(e.away, "Équipe / joueur", settings.isFavTeam(e.away), { state.update { it.toggleTeam(e.away) } }, null)
+                CheckRow(e.home, "Équipe / joueur", settings.isFavTeam(e.home), null) { state.update { it.toggleTeam(e.home) } }
+                CheckRow(e.away, "Équipe / joueur", settings.isFavTeam(e.away), null) { state.update { it.toggleTeam(e.away) } }
             }
-            if (e.kind == Kind.EVENT && norm(e.competition) != norm(e.sport)) {
-                StarRow(e.competition, "Compétition", settings.isFavCompetition(e.sport, e.competition), { state.update { it.toggleCompetition(e.sport, e.competition) } }, null)
-            }
-            StarRow(e.sport, "Sport", settings.isFavSport(e.sport), { state.update { it.toggleSport(e.sport) } }, null)
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { addToCalendar(ctx, e, state.channels) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.DateRange, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Ajouter à mon agenda")
+            if (e.kind == Kind.EVENT && e.competition.isNotBlank() && norm(e.competition) != norm(e.sport)) {
+                CheckRow(e.competition, "Compétition", settings.isFavCompetition(e.sport, e.competition), null) {
+                    state.update { it.toggleCompetition(e.sport, e.competition) }
+                }
             }
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text.uppercase(), Modifier.padding(top = 8.dp),
-        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-    )
 }
 
 // ───────────────────────────── Utilitaires ─────────────────────────────
@@ -605,8 +550,7 @@ private fun hour(t: Long): String = SimpleDateFormat("HH:mm", Locale.FRENCH).for
 private fun dayLabel(t: Long, now: Long): String {
     val a = Calendar.getInstance().apply { timeInMillis = now }
     val b = Calendar.getInstance().apply { timeInMillis = t }
-    val days = ((startOfDay(b) - startOfDay(a)) / 86_400_000.0).let { Math.round(it).toInt() }
-    return when (days) {
+    return when (Math.round((startOfDay(b) - startOfDay(a)) / 86_400_000.0).toInt()) {
         0 -> "Aujourd'hui"
         1 -> "Demain"
         else -> SimpleDateFormat("EEEE d MMMM", Locale.FRENCH).format(Date(t)).replaceFirstChar { it.uppercase() }

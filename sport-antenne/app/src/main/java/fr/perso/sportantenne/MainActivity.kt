@@ -1,31 +1,39 @@
 package fr.perso.sportantenne
 
+import android.Manifest
 import android.app.Application
-import android.graphics.Color
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fr.perso.sportantenne.core.Catalogue
 import fr.perso.sportantenne.core.Channel
 import fr.perso.sportantenne.core.Event
-import fr.perso.sportantenne.core.Guide
-import fr.perso.sportantenne.core.Schedule
 import fr.perso.sportantenne.ui.SportAntenneApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Repo.scheduleBackgroundRefresh(applicationContext)
+        if (Build.VERSION.SDK_INT >= 33 && savedInstanceState == null &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent { SportAntenneApp() }
     }
 }
@@ -35,13 +43,15 @@ class AppState(app: Application) : AndroidViewModel(app) {
         private set
     var channels by mutableStateOf<Map<String, Channel>>(emptyMap())
         private set
+    var catalogue by mutableStateOf(Catalogue.EMPTY)
+        private set
     var settings by mutableStateOf(Settings.load(app))
         private set
     var loading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
         private set
-    var lastUpdate by mutableStateOf(0L)
+    var lastUpdate by mutableLongStateOf(0L)
         private set
 
     init {
@@ -51,11 +61,11 @@ class AppState(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun show(guide: Guide) {
-        val built = withContext(Dispatchers.Default) { Schedule.build(guide.broadcasts) }
-        channels = guide.channels.associateBy { it.id }
-        events = built
-        lastUpdate = Repo.lastUpdate(getApplication())
+    private fun show(data: Data) {
+        channels = data.channels
+        catalogue = data.catalogue
+        events = data.events
+        lastUpdate = data.updated
     }
 
     fun refresh() {
@@ -66,7 +76,8 @@ class AppState(app: Application) : AndroidViewModel(app) {
             try {
                 show(Repo.refresh(getApplication()))
             } catch (e: Exception) {
-                error = "Mise à jour impossible : ${e.message ?: e.javaClass.simpleName}"
+                error = if (events.isEmpty()) "Programme indisponible : vérifiez la connexion puis réessayez."
+                else "Mise à jour impossible pour l'instant (${e.message ?: "réseau"}). Programme précédent affiché."
             } finally {
                 loading = false
             }
@@ -76,9 +87,12 @@ class AppState(app: Application) : AndroidViewModel(app) {
     fun update(change: (Settings) -> Settings) {
         val next = change(settings)
         settings = next
+        val snapshot = events
+        val names = channels
         viewModelScope.launch(Dispatchers.IO) {
             next.save(getApplication())
-            UpcomingWidget.updateAll(getApplication())
+            UpcomingWidget.render(getApplication(), snapshot, names, next)
+            Alerts.reschedule(getApplication(), snapshot, names, next)
         }
     }
 }
