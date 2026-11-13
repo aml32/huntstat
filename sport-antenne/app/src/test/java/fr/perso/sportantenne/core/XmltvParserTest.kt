@@ -180,6 +180,15 @@ class XmltvParserTest {
             sb.appendLine("== $sport REPLAY (sample)"); ev.filter { it.sport == sport && it.replay }.shuffled(java.util.Random(3)).take(25).forEach { sb.appendLine(line(it)) }
         }
         sb.appendLine("== OTHER SPORTS SHOWN"); ev.filter { it.sport !in setOf("Football", "Rugby", "Basket-ball", "Formule 1", "Football américain", "Hockey") && !it.replay }.forEach { sb.appendLine(line(it)) }
+        // Couverture du catalogue : compétitions du guide réel qui n'y sont pas rattachées.
+        sb.appendLine("== HORS CATALOGUE")
+        ev.groupBy { it.sport to Competitions.idOf(it.sport, it.competition) }.filter { !Competitions.isCatalogued(it.key.second) }
+            .entries.sortedWith(compareBy({ it.key.first }, { -it.value.size }))
+            .forEach { sb.appendLine("  ${it.key.first} | ${it.value[0].competition} | ${it.value.size}") }
+        sb.appendLine("== RATTACHEMENTS")
+        ev.groupBy { Triple(it.sport, it.competition, Competitions.byId(Competitions.idOf(it.sport, it.competition))?.let { c -> c.country.substringAfter(' ') + " / " + c.name }) }
+            .filter { it.key.third != null }.entries.sortedWith(compareBy({ it.key.first }, { it.key.third }))
+            .forEach { sb.appendLine("  ${it.key.first} | ${it.key.second} -> ${it.key.third} | ${it.value.size}") }
         File(System.getenv("GUIDE_REPORT") ?: "build/guide-report.txt").writeText(sb.toString())
         assertTrue(ev.size > 200)
     }

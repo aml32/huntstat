@@ -39,6 +39,9 @@ data class Event(
     val channels: List<String>,
     /** Direct confirmé par un calendrier sportif indépendant du guide TV. */
     val verified: Boolean = false,
+    /** Logos des équipes (direct confirmé uniquement). */
+    val homeLogo: String = "",
+    val awayLogo: String = "",
 ) {
     val hasTeams get() = home.isNotBlank() && away.isNotBlank()
     val headline get() = if (hasTeams) "$home – $away" else title
@@ -142,7 +145,8 @@ object Schedule {
                 )
             } else {
                 lastIndex[key] = out.size
-                val verdict = check?.verdict(b) ?: Verdict.UNKNOWN
+                val resolution = check?.resolve(b)
+                val verdict = resolution?.verdict ?: Verdict.UNKNOWN
                 verdicts += verdict
                 out += Event(
                     key = key, start = b.start, stop = b.stop, sport = b.sport,
@@ -155,6 +159,7 @@ object Schedule {
                     },
                     channels = listOf(b.channelId),
                     verified = verdict == Verdict.LIVE,
+                    homeLogo = resolution?.homeLogo ?: "", awayLogo = resolution?.awayLogo ?: "",
                 )
             }
         }

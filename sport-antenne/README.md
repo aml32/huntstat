@@ -8,6 +8,11 @@ et la chaîne qui les diffuse. Sans pub, sans compte, sans achat.
 - **Favoris** : sports à cocher, puis pour chaque sport ses compétitions classées par pays
   (`core/Competitions.kt`). Sans compétition cochée, tout le sport est affiché ; sinon seules les
   compétitions cochées. Les compétitions vues dans le guide mais hors catalogue restent cochables.
+  Le catalogue compte environ 370 compétitions dans 45 sports ; un test vérifie que chacune est
+  reconnue sous son propre nom, et le rapport de `XmltvParserTest` liste les libellés du guide réel
+  qui ne sont rattachés à aucune (section « HORS CATALOGUE »).
+- **Logos** : chaînes (adresse fournie par le guide TV, pastille de couleur à défaut) et écussons
+  des équipes pour les directs confirmés (fournis par le calendrier).
 - **Chaînes** : cocher les chaînes reçues pour masquer les autres.
 - **Alertes** : notification avant chaque direct d'une compétition cochée (délai réglable), ou match par match.
 - Ajout au calendrier avec la chaîne dans le titre, widget d'accueil.
@@ -32,7 +37,7 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-64 tests automatiques (`./gradlew testDebugUnitTest`) :
+69 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;

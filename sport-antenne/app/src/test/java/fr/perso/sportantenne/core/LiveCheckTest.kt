@@ -100,6 +100,19 @@ class LiveCheckTest {
         assertEquals("un match annulé n'est plus un direct", Verdict.REPLAY, c.verdict(match("Brest", "Nantes")))
     }
 
+    @Test fun teamLogosFollowTheGuideOrder() {
+        val json = """{"events":[{"competitions":[{"date":"2026-11-14T20:15Z","status":{"type":{"name":"STATUS_SCHEDULED"}},"competitors":[
+            {"homeAway":"home","team":{"displayName":"Lyon","logo":"https://img/lyon.png"}},
+            {"homeAway":"away","team":{"displayName":"Lille","logo":"https://img/lille.png"}}]}]}]}"""
+        val c = LiveCheck(Fixtures(FixtureParsers.espn(json, "football"), mapOf("football" to setOf(day))))
+        // Le guide annonce « Lille – Lyon » alors que le calendrier reçoit à Lyon : les logos suivent l'ordre du guide.
+        val event = Schedule.build(listOf(match("Lille", "Lyon")), c).single()
+        assertTrue(event.verified)
+        assertEquals("https://img/lille.png", event.homeLogo)
+        assertEquals("https://img/lyon.png", event.awayLogo)
+        assertEquals("", Schedule.build(listOf(match("Toulouse", "Strasbourg")), c).single().homeLogo)
+    }
+
     @Test fun malformedCalendarsDoNotCrash() {
         assertTrue(FixtureParsers.espn("{}", "football").isEmpty())
         assertTrue(FixtureParsers.espn("""{"events":[{"competitions":[]},{"competitions":[{"competitors":[{}]}]}]}""", "football").isEmpty())

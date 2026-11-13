@@ -68,7 +68,7 @@ class AppSmokeTest {
     }
 
     @Test fun walkThroughEveryScreen() {
-        compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous").fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous").fetchSemanticsNodes().isNotEmpty() }
         shot("1-a-venir")
         compose.onNodeWithText("Demain").performClick()
         shot("2-demain")
@@ -105,6 +105,11 @@ class AppSmokeTest {
         compose.waitForIdle()
         shot("8-a-venir-filtre")
         assertTrue("seuls les onglets des sports cochés", compose.onAllNodesWithText("Tennis").fetchSemanticsNodes().isEmpty())
+        // Selon l'heure, le premier direct confirmé est aujourd'hui ou un des jours suivants.
+        for (day in listOf("Aujourd'hui", "Demain", "Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi")) {
+            if (compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().isNotEmpty()) break
+            if (compose.onAllNodesWithText(day).fetchSemanticsNodes().isNotEmpty()) { compose.onNodeWithText(day).performClick(); compose.waitForIdle() }
+        }
         compose.onAllNodes(hasText("Direct confirmé", substring = true)).onFirst().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Ajouter à mon calendrier").fetchSemanticsNodes().isNotEmpty() }
         shot("9-fiche")

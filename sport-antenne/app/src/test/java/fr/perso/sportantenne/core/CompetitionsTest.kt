@@ -6,6 +6,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompetitionsTest {
+    private companion object { const val ALLOWED_AMBIGUOUS = 0 }
+
     private fun name(sport: String, label: String) = Competitions.byId(Competitions.idOf(sport, label))?.let { "${it.country.substringAfter(' ')} / ${it.name}" }
 
     @Test fun guideLabelsMapToTheCatalogue() {
@@ -42,6 +44,9 @@ class CompetitionsTest {
         assertEquals("Amérique du Nord / NBA", name("Basket-ball", "NBA Saison régulière"))
         assertEquals("Europe / Euroligue", name("Basket-ball", "Euroligue masculine"))
         assertEquals("France / Starligue", name("Handball", "Daikin StarLigue"))
+        assertEquals("France / Ligue A féminine (Saforelle)", name("Volley-ball", "Saforelle VOLSTAR"))
+        assertEquals("France / Marmara SpikeLigue (Ligue A)", name("Volley-ball", "Alterna VOLSTAR"))
+        assertEquals("France / Ligue féminine (Butagaz)", name("Handball", "Ligue Butagaz Energie"))
         assertEquals("International / ATP Finals", name("Tennis", "ATP Finals"))
         assertEquals("International / Tournois ATP", name("Tennis", "ATP 250 Stockholm"))
         assertEquals("International / Grands Prix de Formule 1", name("Formule 1", "Grand Prix de Las Vegas"))
@@ -98,9 +103,52 @@ class CompetitionsTest {
         assertNotEquals(a, Competitions.idOf("Football", "Trophée Truc"))
     }
 
+    @Test fun minorSportsAndGenericLabels() {
+        assertEquals("International / Tournée des quatre tremplins", name("Ski", "Tournée des quatre tremplins"))
+        assertEquals("International / Tournée des quatre tremplins", name("Ski", "Tournée des 4 tremplins à Innsbruck"))
+        assertEquals("International / Saut à ski", name("Ski", "Coupe du monde de saut à ski"))
+        assertEquals("International / Coupe du monde de ski alpin", name("Ski", "Coupe du monde à Sölden"))
+        assertEquals("International / Autres épreuves (Levi, Kitzbühel, Sölden…)", name("Ski", "Levi"))
+        assertEquals("Arabie saoudite / Saudi Pro League", name("Football", "Saudi Pro League"))
+        assertEquals("Belgique / Pro League", name("Football", "Pro League"))
+        assertEquals("Asie et Océanie / Ligue des champions d'Asie", name("Football", "Ligue des champions d'Asie"))
+        assertEquals("International / Jeux paralympiques", name("Handisport", "Jeux paralympiques"))
+        assertEquals("International / Grand Prix ISU", name("Patinage", "Grand Prix ISU"))
+        assertEquals("International / ONE Championship", name("Kickboxing", "ONE Friday Fights 179"))
+        assertEquals("International / Coupe de l'America", name("Sports nautiques", "Coupe de l'America"))
+        assertEquals("International / Global Champions Tour et League", name("Équitation", "Global Champions League"))
+        assertEquals("International / Jumpings et CSI", name("Équitation", "Jumping International de Bordeaux"))
+        assertEquals("International / T100", name("Triathlon", "Dubaï T100"))
+        assertEquals("International / UTMB World Series", name("Trail", "UTMB Index en Cappadoce"))
+        assertEquals("International / Coupe du monde", name("Rugby à XIII", "Coupe du monde"))
+        assertEquals("International / TGL et WTGL", name("Golf", "WTGL"))
+        assertEquals("International / Ligue des champions", name("Judo", "Ligue des champions par équipes"))
+        assertEquals("International / Jeux olympiques", name("Multisports", "Home of the Olympics"))
+        assertEquals("Écosse / Premiership écossaise", name("Football", "Scottish Premiership"))
+        assertEquals("Danemark / Superliga danoise", name("Football", "Superliga"))
+        // Le guide ne donne parfois que le sport : une entrée dédiée, cochable.
+        val generic = Competitions.idOf("Football", "Football")
+        assertTrue(Competitions.isCatalogued(generic))
+        assertEquals("Compétition non précisée par le guide", Competitions.byId(generic)!!.name)
+        assertTrue(Competitions.choices("Football").any { "c:" + it.id == generic })
+        assertNotEquals(generic, Competitions.idOf("Rugby", "Rugby"))
+    }
+
+    /** Contrôle systématique : chaque entrée du catalogue doit être reconnue sous son propre nom. */
+    @Test fun everyEntryIsReachableUnderItsOwnName() {
+        val wrong = ArrayList<String>()
+        for (sport in Competitions.sports) for (c in Competitions.of(sport)) {
+            val got = Competitions.byId(Competitions.idOf(sport, c.name))
+            if (got?.id != c.id) wrong += "$sport / ${c.country} / ${c.name} -> ${got?.let { it.country + " / " + it.name } ?: "hors catalogue"}"
+        }
+        System.getenv("GUIDE_REPORT")?.let { java.io.File(it + ".self").writeText(wrong.joinToString("\n")) }
+        assertTrue("entrées inatteignables :\n" + wrong.joinToString("\n"), wrong.size <= ALLOWED_AMBIGUOUS)
+    }
+
     @Test fun catalogueIsConsistent() {
         assertTrue(Competitions.sports.first() == "Football")
-        assertTrue(Competitions.of("Football").size > 50)
+        assertTrue(Competitions.of("Football").size > 90)
+        assertTrue(Competitions.sports.size >= 45)
         val ids = Competitions.sports.flatMap { Competitions.of(it) }.map { it.id }
         assertEquals("identifiants uniques", ids.size, ids.toSet().size)
         // Chaque sport du catalogue porte un nom reconnu par l'analyse du guide.

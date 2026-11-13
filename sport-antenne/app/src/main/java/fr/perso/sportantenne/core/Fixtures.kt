@@ -14,6 +14,9 @@ data class Fixture(
     val home: String,
     val away: String,
     val league: String,
+    /** Adresses des logos des deux équipes, quand le calendrier les fournit. */
+    val homeLogo: String = "",
+    val awayLogo: String = "",
 )
 
 /** Les calendriers téléchargés et les jours qu'ils couvrent réellement (source → jours AAAA-MM-JJ, UTC). */
@@ -23,7 +26,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
         tmp.bufferedWriter().use { w ->
             coveredDays.forEach { (source, days) -> days.forEach { w.write("D\t$source\t$it\n") } }
             list.forEach { f ->
-                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league)).joinToString("\t"))
+                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league), clean(f.homeLogo), clean(f.awayLogo)).joinToString("\t"))
                 w.write("\n")
             }
         }
@@ -55,7 +58,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
             f.forEachLine { line ->
                 val p = line.split('\t')
                 if (p[0] == "D" && p.size >= 3) days.getOrPut(p[1]) { HashSet() } += p[2]
-                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5]) }
+                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5], p.getOrElse(6) { "" }, p.getOrElse(7) { "" }) }
             }
             return Fixtures(list, days)
         }
@@ -85,13 +88,17 @@ object FixtureParsers {
             if (teams.length() != 2) continue
             var home = ""
             var away = ""
+            var homeLogo = ""
+            var awayLogo = ""
             for (k in 0 until 2) {
                 val c = teams.optJSONObject(k) ?: continue
-                val name = c.optJSONObject("team")?.optString("displayName") ?: ""
-                if (c.optString("homeAway") == "away") away = name else if (home.isEmpty()) home = name else away = name
+                val team = c.optJSONObject("team")
+                val name = team?.optString("displayName") ?: ""
+                val logo = team?.optString("logo")?.takeIf { it.startsWith("https://") } ?: ""
+                if (c.optString("homeAway") == "away" || home.isNotEmpty()) { away = name; awayLogo = logo } else { home = name; homeLogo = logo }
             }
             if (home.isBlank() || away.isBlank()) continue
-            out += Fixture(source, start, home, away, comp.optString("altGameNote", ""))
+            out += Fixture(source, start, home, away, comp.optString("altGameNote", ""), homeLogo, awayLogo)
         }
         return out
     }

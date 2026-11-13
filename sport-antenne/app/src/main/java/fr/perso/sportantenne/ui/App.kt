@@ -344,7 +344,11 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
             }
         }
         Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp)) {
-            Text(e.headline, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TeamLogo(e.homeLogo)
+                Text(e.headline, Modifier.weight(1f, fill = false), fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                TeamLogo(e.awayLogo, start = true)
+            }
             Text(subtitle(e), color = st.color.forText(), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -362,6 +366,17 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
             Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.padding(end = 10.dp).size(22.dp), tint = Orange)
         }
     }
+}
+
+/** Écusson d'une équipe ; rien n'est affiché si le calendrier n'en fournit pas ou s'il ne se charge pas. */
+@Composable
+private fun TeamLogo(url: String, start: Boolean = false) {
+    if (url.isEmpty()) return
+    SubcomposeAsyncImage(
+        model = url, contentDescription = null,
+        modifier = Modifier.padding(start = if (start) 6.dp else 0.dp, end = if (start) 0.dp else 6.dp).size(26.dp),
+        success = { SubcomposeAsyncImageContent() },
+    )
 }
 
 /** Logo de la chaîne et son nom ; à défaut de logo, une pastille de couleur avec ses initiales. */
@@ -462,7 +477,7 @@ private fun CompetitionPicker(sport: String, state: AppState, onBack: () -> Unit
     val st = styleOf(sport)
     var query by rememberSaveable { mutableStateOf("") }
     val all = remember(sport, state.catalogue) {
-        val catalogued = Competitions.of(sport).map { CompetitionChoice("c:" + it.id, it.name, it.country) }
+        val catalogued = Competitions.choices(sport).map { CompetitionChoice("c:" + it.id, it.name, it.country) }
         // Compétitions vues dans le programme mais absentes du catalogue.
         val seen = state.catalogue.competitions.values.filter { norm(it.first) == norm(sport) }
             .map { Competitions.idOf(it.first, it.second) to it.second }
@@ -473,11 +488,11 @@ private fun CompetitionPicker(sport: String, state: AppState, onBack: () -> Unit
     val q = norm(query)
     val rows = remember(all, q) {
         val out = ArrayList<Any>()
-        var country = ""
-        for (c in all) {
-            if (q.isNotEmpty() && !norm(c.name).contains(q) && !norm(c.country).contains(q)) continue
-            if (c.country != country) { out += c.country; country = c.country }
-            out += c
+        // Un seul bloc par pays, dans l'ordre du catalogue ; les compétitions hors catalogue en dernier.
+        val groups = all.filter { q.isEmpty() || norm(it.name).contains(q) || norm(it.country).contains(q) }.groupBy { it.country }
+        for ((country, list) in groups.entries.sortedBy { it.key == Competitions.OTHER }) {
+            out.add(country)
+            out.addAll(list.distinctBy { it.id })
         }
         out
     }
@@ -642,7 +657,11 @@ private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit
         Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Text("${st.emoji}  ${subtitle(e)}", color = st.color.forText(), fontWeight = FontWeight.Bold)
-                Text(e.headline, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TeamLogo(e.homeLogo)
+                    Text(e.headline, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                    TeamLogo(e.awayLogo, start = true)
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     (if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +

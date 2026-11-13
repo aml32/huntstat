@@ -22,11 +22,16 @@ class LiveCheck(private val fixtures: Fixtures) {
     private val teamsBySource: Map<String, List<Side>> = bySource.mapValues { (_, l) -> l.flatMap { listOf(it.home, it.away) } }
     private val bestCache = HashMap<String, Int>()
 
-    fun verdict(b: Broadcast): Verdict {
-        val source = sourceOf(b) ?: return Verdict.UNKNOWN
+    /** Verdict et, pour un direct confirmé, les logos des deux équipes dans l'ordre du guide. */
+    class Resolution(val verdict: Verdict, val homeLogo: String = "", val awayLogo: String = "")
+
+    fun verdict(b: Broadcast): Verdict = resolve(b).verdict
+
+    fun resolve(b: Broadcast): Resolution {
+        val source = sourceOf(b) ?: return UNKNOWN
         val entries = bySource[source] ?: emptyList()
-        if (source == "f1") return formula1(b, entries)
-        if (b.home.isBlank() || b.away.isBlank()) return Verdict.UNKNOWN
+        if (source == "f1") return Resolution(formula1(b, entries))
+        if (b.home.isBlank() || b.away.isBlank()) return UNKNOWN
 
         val context = norm(b.competition + " " + b.detail)
         val women = WOMEN.containsMatchIn(context)
@@ -42,20 +47,23 @@ class LiveCheck(private val fixtures: Fixtures) {
             // Les deux ordres : le guide n'indique pas toujours l'équipe à domicile en premier.
             val direct = score(gh, e.home) to score(ga, e.away)
             val swapped = score(gh, e.away) to score(ga, e.home)
-            val (sh, sa) = if (direct.first + direct.second >= swapped.first + swapped.second) direct else swapped
+            val straight = direct.first + direct.second >= swapped.first + swapped.second
+            val (sh, sa) = if (straight) direct else swapped
             val strongH = sh >= 2 && sh >= bestH
             val strongA = sa >= 2 && sa >= bestA
             val samePair = (sh >= 1 && sa >= 1 && (strongH || strongA)) ||
                 (strongH && bestA < 2) || (strongA && bestH < 2)
             if (!samePair) continue
-            if (inWindow(b, e.f.start)) return Verdict.LIVE
+            if (inWindow(b, e.f.start)) {
+                return if (straight) Resolution(Verdict.LIVE, e.f.homeLogo, e.f.awayLogo) else Resolution(Verdict.LIVE, e.f.awayLogo, e.f.homeLogo)
+            }
             if (strongH && strongA) pairElsewhere = true
         }
         // Même affiche programmée à un autre moment : cette diffusion n'est pas le direct.
-        if (pairElsewhere) return Verdict.REPLAY
+        if (pairElsewhere) return REPLAY
         // Compétition entièrement couverte ce jour-là et aucun match trouvé : rediffusion.
-        if (comprehensive(source, b) && covered(source, b.start)) return Verdict.REPLAY
-        return Verdict.UNKNOWN
+        if (comprehensive(source, b) && covered(source, b.start)) return REPLAY
+        return UNKNOWN
     }
 
     private fun formula1(b: Broadcast, entries: List<Entry>): Verdict {
@@ -84,6 +92,8 @@ class LiveCheck(private val fixtures: Fixtures) {
     }
 
     companion object {
+        private val UNKNOWN = Resolution(Verdict.UNKNOWN)
+        private val REPLAY = Resolution(Verdict.REPLAY)
         private const val MIN = 60_000L
         private val WOMEN = Regex("\\b(women|womens|w|feminin|feminine|feminines|femenil|femenina|frauen|vrouwen|dames|arkema|premiere ligue|wsl|nwsl|liga f|reina|ncaaw|wnba|lyonnes)\\b")
         private val YOUTH = Regex("\\b(u ?1[5-9]|u ?2[0-3]|espoirs|moins de \\d+|youth|jeunes|juniors|reserve|primavera)\\b")
