@@ -44,7 +44,7 @@ object Competitions {
             "Ligue 1" to "ligue 1", "Ligue 2" to "ligue 2", "National (Ligue 3)" to "ligue 3|national(?! 2| 3| league)",
             "National 2 et 3" to "national 2|national 3|n2|n3", "Coupe de France" to "coupe de france(?! feminine)",
             "Trophée des champions" to "trophee des champions", "Première Ligue féminine" to "arkema|premiere ligue|d1 feminine|d1 arkema",
-            "Coupe de France féminine" to "coupe de france feminine", "Championnats de jeunes" to "u ?1[5-9]|moins de 1\\d|gambardella",
+            "Coupe de France féminine" to "coupe de france feminine", "Championnats de jeunes" to "championnat (de france |national )?(des )?(u ?1[5-9]|moins de 1\\d)|gambardella",
         )
         add(foot, EN,
             "Premier League" to "premier league(?! feminine)", "Championship" to "championship|efl championship",
@@ -74,14 +74,19 @@ object Competitions {
             "Ligue des champions" to "ligue des champions(?! feminine| de la caf| d afrique| asiatique| de l afc)|champions league(?! de la caf)",
             "Ligue Europa" to "ligue europa|europa league", "Ligue Conférence" to "ligue conference|conference league",
             "Supercoupe d'Europe" to "supercoupe d europe|supercoupe de l uefa", "Youth League" to "youth league",
-            "Ligue des nations" to "ligue des nations(?! feminine)|nations league", "Euro" to "euro(?! ?basket| u| espoirs| feminin)|championnat d europe(?! u| espoirs)",
+            "Ligue des nations féminine" to "ligue des nations feminine|women s nations league",
+            "Ligue des nations" to "ligue des nations(?! feminine)|nations league",
+            "Qualifications Euro" to "qualifications? (a l |de l |pour l )?euro(?! ?basket)|eliminatoires (de l )?euro",
+            "Euro" to "euro(?! ?basket| u| espoirs| feminin)|championnat d europe(?! u| espoirs)",
             "Euro féminin" to "euro feminin", "Euro Espoirs" to "euro espoirs|euro u ?21",
+            "Euro U17 et U19" to "euro u ?1[79]|championnat d europe u ?1[79]",
         )
         add(foot, WORLD,
             "Qualifications Coupe du monde" to "qualifications? (a la |de la |pour la )?coupe du monde|eliminatoires (de la )?coupe du monde|qualif\\w* mondial",
-            "Coupe du monde" to "coupe du monde(?! des clubs| feminine| u)", "Coupe du monde féminine" to "coupe du monde feminine",
+            "Coupe du monde" to "coupe du monde(?! des clubs| feminine| u| des moins)", "Coupe du monde féminine" to "coupe du monde feminine",
+            "Coupes du monde U17 et U20" to "coupe du monde (u ?\\d+|des moins de \\d+)|mondial u ?\\d+",
             "Coupe du monde des clubs" to "coupe du monde des clubs|mondial des clubs|coupe intercontinentale",
-            "Matchs amicaux" to "amical|amicaux", "Jeux olympiques" to "jeux olympiques|olympi",
+            "Matchs amicaux" to "amical|amicaux|tournoi de france|shebelieves", "Jeux olympiques" to "jeux olympiques|olympi",
         )
         add(foot, AFRICA,
             "Qualifications CAN" to "qualifications de la can|qualifications? a la can|eliminatoires de la can",
@@ -101,12 +106,14 @@ object Competitions {
         add(rugby, EU,
             "Champions Cup" to "champions cup|coupe d europe", "Challenge Cup" to "challenge cup|challenge europeen",
             "Tournoi des Six Nations" to "six nations(?! feminin| u)|6 nations(?! feminin| u)", "Six Nations féminin" to "six nations feminin|6 nations feminin",
-            "Six Nations U20" to "six nations u|6 nations u|moins de 20", "Premiership anglaise" to "premiership", "United Rugby Championship" to "united rugby|urc",
+            "Six Nations U20" to "six nations u|6 nations u|moins de 20", "Rugby Europe Championship" to "rugby europe", "Premiership anglaise" to "premiership", "United Rugby Championship" to "united rugby|urc",
         )
         add(rugby, WORLD,
-            "Coupe du monde" to "coupe du monde", "Nations Championship" to "championnat des nations|nations championship",
-            "Tests-matchs" to "test match|tests? matchs?|tournee", "Rugby Championship" to "rugby championship", "Bledisloe Cup" to "bledisloe",
-            "Rugby à 7 (SVNS)" to "sevens|svns|rugby a 7|a vii",
+            "Coupe du monde féminine" to "coupe du monde feminine", "Coupe du monde U20" to "championnat du monde (u ?20|des moins de 20)|mondial u ?20",
+            "Coupe du monde" to "coupe du monde", "WXV (féminin)" to "wxv",
+            "Pacific Nations Cup" to "pacific nations", "Nations Championship" to "championnat des nations|nations championship|coupe des nations|nations cup",
+            "Tests-matchs et tournées" to "test match|tests? matchs?|tournee|autumn nations|serie d automne", "Rugby Championship" to "rugby championship", "Bledisloe Cup" to "bledisloe",
+            "Rugby à 7 (SVNS)" to "sevens|svns|rugby a 7|a vii", "Jeux olympiques" to "jeux olympiques|olympi",
         )
         add(rugby, ASIA, "Super Rugby" to "super rugby", "Championnat des provinces néo-zélandaises" to "provinces neo zelandaises|npc")
 
@@ -114,23 +121,24 @@ object Competitions {
         add(basket, US, "NBA" to "nba(?! g)", "WNBA" to "wnba", "NCAA" to "ncaa")
         add(basket, FR, "Betclic Élite" to "betclic elite|elite(?! 2)|pro a|jeep elite", "Pro B / Élite 2" to "pro b|elite 2", "Coupe de France" to "coupe de france", "Ligue féminine (Wonderligue)" to "wonderligue|ligue feminine|lfb", "Leaders Cup" to "leaders cup")
         add(basket, EU, "Euroligue" to "euroligue(?! feminine)|euroleague(?! women)", "Euroligue féminine" to "euroligue feminine", "EuroCoupe" to "eurocoupe|eurocup", "Ligue des champions (BCL)" to "ligue des champions|bcl", "Europe Cup" to "europe cup")
-        add(basket, WORLD, "EuroBasket" to "eurobasket|euro basket|championnat d europe", "Coupe du monde" to "coupe du monde|mondial", "Basket 3x3" to "3x3|world tour")
+        add(basket, WORLD, "EuroBasket féminin" to "eurobasket feminin|euro basket feminin|euro feminin", "Coupe du monde féminine" to "coupe du monde feminine",
+            "Jeux olympiques" to "jeux olympiques|olympi", "EuroBasket" to "eurobasket|euro basket|championnat d europe", "Coupe du monde" to "coupe du monde|mondial", "Basket 3x3" to "3x3|world tour")
 
         val hand = "Handball"
         add(hand, FR, "Starligue" to "starligue|lidl starligue|liqui moly starligue", "Proligue" to "proligue", "Ligue féminine (Butagaz)" to "butagaz|ligue feminine|lfh", "Coupe de France" to "coupe de france", "Trophée des champions" to "trophee des champions")
-        add(hand, EU, "Ligue des champions féminine" to "ligue des champions feminine", "Ligue des champions" to "ligue des champions", "Ligue européenne" to "ligue europeenne|european league", "Euro" to "euro|championnat d europe")
-        add(hand, WORLD, "Championnat du monde" to "championnat du monde|mondial|coupe du monde", "Matchs internationaux" to "amical|golden league|qualifications")
+        add(hand, EU, "Ligue des champions féminine" to "ligue des champions feminine", "Ligue des champions" to "ligue des champions", "Ligue européenne" to "ligue europeenne|european league", "Euro féminin" to "euro feminin|championnat d europe feminin", "Euro" to "euro|championnat d europe")
+        add(hand, WORLD, "Championnat du monde féminin" to "(championnat du monde|mondial) feminin", "Jeux olympiques" to "jeux olympiques|olympi", "Championnat du monde" to "championnat du monde|mondial|coupe du monde", "Matchs internationaux" to "amical|golden league|qualifications")
 
         val volley = "Volley-ball"
         add(volley, FR, "Marmara SpikeLigue (Ligue A)" to "spikeligue|ligue a(?! feminine)|volstar|ligue am", "Ligue A féminine" to "ligue a feminine|saforelle|laf", "Coupe et Supercoupe de France" to "coupe de france|supercoupe")
         add(volley, EU, "Ligue des champions" to "ligue des champions", "Euro" to "euro|championnat d europe")
-        add(volley, WORLD, "Ligue des nations" to "ligue des nations|vnl", "Championnat du monde" to "championnat du monde|mondial|coupe du monde")
+        add(volley, WORLD, "Jeux olympiques" to "jeux olympiques|olympi", "Ligue des nations" to "ligue des nations|vnl", "Championnat du monde" to "championnat du monde|mondial|coupe du monde")
 
         val tennis = "Tennis"
         add(tennis, WORLD,
             "Open d'Australie" to "open d australie|australian open", "Roland-Garros" to "roland garros", "Wimbledon" to "wimbledon", "US Open" to "us open",
             "ATP Finals" to "atp finals|masters de fin", "WTA Finals" to "wta finals", "Masters 1000" to "masters 1000|rolex|indian wells|miami|monte carlo|madrid|rome|cincinnati|shanghai|paris bercy|montreal|toronto",
-            "Coupe Davis" to "coupe davis|davis cup", "Billie Jean King Cup" to "billie jean king", "Laver Cup et United Cup" to "laver cup|united cup",
+            "Coupe Davis" to "coupe davis|davis cup", "Billie Jean King Cup" to "billie jean king", "Laver Cup et United Cup" to "laver cup|united cup", "Jeux olympiques" to "jeux olympiques|olympi",
             "Tournois ATP" to "atp", "Tournois WTA" to "wta",
         )
 

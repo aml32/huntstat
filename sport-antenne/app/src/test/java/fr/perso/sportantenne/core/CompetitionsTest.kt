@@ -48,6 +48,44 @@ class CompetitionsTest {
         assertEquals("Amérique du Nord / NFL", name("Football américain", "NFL"))
     }
 
+    @Test fun nationalTeamCompetitions() {
+        val foot = "Football"
+        assertEquals("International / Coupe du monde", name(foot, "Coupe du monde 2026"))
+        assertEquals("International / Coupe du monde féminine", name(foot, "Coupe du monde féminine"))
+        assertEquals("International / Coupes du monde U17 et U20", name(foot, "Coupe du monde U17"))
+        assertEquals("International / Coupes du monde U17 et U20", name(foot, "Coupe du monde des moins de 20 ans"))
+        assertEquals("International / Matchs amicaux", name(foot, "Match amical international"))
+        assertEquals("Europe / Euro", name(foot, "Euro 2028"))
+        assertEquals("Europe / Euro féminin", name(foot, "Euro féminin"))
+        assertEquals("Europe / Qualifications Euro", name(foot, "Qualifications à l'Euro"))
+        assertEquals("Europe / Ligue des nations", name(foot, "Ligue des Nations UEFA"))
+        assertEquals("Europe / Ligue des nations féminine", name(foot, "Ligue des nations féminine"))
+        assertEquals("Amérique du Sud / Copa América", name(foot, "Copa America"))
+        assertEquals("International / Jeux olympiques", name(foot, "Jeux olympiques"))
+        assertEquals("France / Championnats de jeunes", name(foot, "Championnat de France des moins de 17 ans"))
+        assertEquals("France / Championnats de jeunes", name(foot, "Championnat de France U19"))
+        val rugby = "Rugby"
+        assertEquals("International / Coupe du monde", name(rugby, "Coupe du monde"))
+        assertEquals("International / Coupe du monde féminine", name(rugby, "Coupe du monde féminine"))
+        assertEquals("Europe / Tournoi des Six Nations", name(rugby, "Tournoi des Six Nations"))
+        assertEquals("Europe / Six Nations féminin", name(rugby, "Tournoi des Six Nations féminin"))
+        assertEquals("Europe / Six Nations U20", name(rugby, "Six Nations U20"))
+        assertEquals("International / Nations Championship", name(rugby, "Nations Championship"))
+        assertEquals("International / Nations Championship", name(rugby, "Coupe des Nations"))
+        assertEquals("International / Pacific Nations Cup", name(rugby, "Pacific Nations Cup"))
+        assertEquals("International / Tests-matchs et tournées", name(rugby, "Test-match"))
+        assertEquals("International / Rugby Championship", name(rugby, "Rugby Championship"))
+        assertEquals("International / WXV (féminin)", name(rugby, "WXV 1"))
+        assertEquals("International / Coupe Davis", name("Tennis", "Coupe Davis"))
+        assertEquals("International / Billie Jean King Cup", name("Tennis", "Billie Jean King Cup"))
+        assertEquals("International / EuroBasket féminin", name("Basket-ball", "Qualifications à l'EuroBasket féminin"))
+        assertEquals("International / EuroBasket", name("Basket-ball", "EuroBasket"))
+        assertEquals("International / Championnat du monde féminin", name("Handball", "Championnat du monde féminin"))
+        assertEquals("International / Championnat du monde", name("Handball", "Championnat du monde"))
+        assertEquals("Europe / Euro féminin", name("Handball", "Euro féminin"))
+        assertEquals("International / Ligue des nations", name("Volley-ball", "Ligue des nations"))
+    }
+
     @Test fun sameLabelInTwoSportsStaysSeparate() {
         assertNotEquals(Competitions.idOf("Football", "Coupe de France"), Competitions.idOf("Basket-ball", "Coupe de France"))
         assertNotEquals(Competitions.idOf("Football", "Ligue des champions"), Competitions.idOf("Handball", "Ligue des champions"))
