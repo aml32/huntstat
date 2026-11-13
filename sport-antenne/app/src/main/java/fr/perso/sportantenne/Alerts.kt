@@ -12,7 +12,6 @@ import android.os.Build
 import fr.perso.sportantenne.core.Channel
 import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.GuideStore
-import fr.perso.sportantenne.core.Schedule
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,7 +61,7 @@ object Alerts {
     /** Recalage complet à partir du cache (démarrage du téléphone, mise à jour de l'appli). */
     fun rescheduleFromDisk(ctx: Context) {
         val guide = GuideStore.load(ctx.filesDir) ?: return
-        reschedule(ctx, Schedule.build(guide.broadcasts), guide.channels.associateBy { it.id }, Settings.load(ctx))
+        reschedule(ctx, Repo.buildEvents(ctx, guide), guide.channels.associateBy { it.id }, Settings.load(ctx))
     }
 
     fun markNotified(ctx: Context, id: String) {

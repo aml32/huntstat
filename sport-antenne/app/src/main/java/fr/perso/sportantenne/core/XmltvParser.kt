@@ -39,6 +39,7 @@ object XmltvParser {
     )
     private val MATCHDAY_TAIL = Regex("\\s*[-,]?\\s*\\(?\\d+\\s?(?:er|re|e|ème|eme)\\s+journée.*$", RegexOption.IGNORE_CASE)
     private val EPISODE = Regex("S\\d+E\\d+|[!?]|^Episode|^Saison", RegexOption.IGNORE_CASE)
+    private val LEADING_COMPETITION = Regex("^([^:|/]{3,40}?) - ([^:|]{2,40} / [^:|]{2,40})$")
     private val SEGMENTS = Regex("\\s*\\.\\s+|\\s*\\.$|\\s+:\\s+|\\s+\\|\\s+")
 
     fun parse(input: InputStream, keepAfter: Long = 0L): Guide {
@@ -119,8 +120,12 @@ object XmltvParser {
         val home: String, val away: String, val detail: String,
     )
 
-    private fun classify(title: String, titleNorm: String, sub: String, catSport: String?, magazineCat: Boolean): Parsed? {
+    private fun classify(rawTitle: String, titleNorm: String, rawSub: String, catSport: String?, magazineCat: Boolean): Parsed? {
         if (MAG_TITLE.containsMatchIn(titleNorm)) return null
+        // « Ligue 1 - Nice / Paris-SG » : la compétition précède l'affiche dans le titre.
+        val lead = LEADING_COMPETITION.matchEntire(rawTitle)
+        val title = lead?.groupValues?.get(2) ?: rawTitle
+        val sub = if (lead != null) lead.groupValues[1] + (if (rawSub.isBlank()) "" else " - $rawSub") else rawSub
 
         // A/B — « Sport : Compétition | Affiche » ou « Sport : Compétition » + sous-titre
         val colon = title.indexOf(" : ")
@@ -154,7 +159,7 @@ object XmltvParser {
         // C/D — « Équipe A / Équipe B » + sous-titre « Compétition - 4e journée » ou « Sport. Compétition. »
         val segs = segments(sub)
         val subSport = segs.firstOrNull()?.takeIf { it.length <= 25 }?.let { Sports.detect(it) }
-        val teams = splitTeams(title, allowDash = subSport != null)
+        val teams = splitTeams(title, allowDash = subSport != null || (catSport != null && !magazineCat && sub.isNotBlank() && title.length <= 45))
         if (teams != null && !magazineCatOnly(magazineCat, subSport)) {
             val sport = subSport ?: catSport ?: return null
             var competition = ""

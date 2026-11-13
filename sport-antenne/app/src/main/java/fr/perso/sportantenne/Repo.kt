@@ -11,6 +11,10 @@ import androidx.work.WorkerParameters
 import fr.perso.sportantenne.core.Catalogue
 import fr.perso.sportantenne.core.Channel
 import fr.perso.sportantenne.core.Event
+import fr.perso.sportantenne.core.Fixture
+import fr.perso.sportantenne.core.FixtureParsers
+import fr.perso.sportantenne.core.Fixtures
+import fr.perso.sportantenne.core.LiveCheck
 import fr.perso.sportantenne.core.Guide
 import fr.perso.sportantenne.core.GuideStore
 import fr.perso.sportantenne.core.Kind
@@ -23,6 +27,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 
@@ -36,6 +45,15 @@ object Repo {
 
     /** Télécharge le guide (3 essais), le met en cache, puis recale widget et alertes. */
     suspend fun refresh(ctx: Context): Data = withContext(Dispatchers.IO) {
+        // Calendriers réels d'abord : ils servent à distinguer les directs des rediffusions.
+        // En cas d'échec, les calendriers déjà en cache restent utilisés.
+        try {
+            val now = System.currentTimeMillis()
+            val fresh = downloadFixtures(now)
+            if (fresh.list.isNotEmpty()) Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir)
+        } catch (e: Exception) {
+            // rien : la vérification retombe sur le cache
+        }
         var failure: Exception? = null
         repeat(3) { attempt ->
             try {
@@ -49,6 +67,77 @@ object Repo {
         }
         throw failure ?: IllegalStateException("Téléchargement impossible")
     }
+
+    private const val DAY = 86_400_000L
+    private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports"
+    private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "289234", "270560", "242041", "244293", "267979")
+
+    private fun get(url: String): String {
+        var last: Exception? = null
+        repeat(2) {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 30_000
+            conn.setRequestProperty("User-Agent", "SportAntenne/1.2 (Android)")
+            try {
+                if (conn.responseCode == 200) return conn.inputStream.bufferedReader().use { it.readText() }
+                last = IllegalStateException("HTTP ${conn.responseCode}")
+            } catch (e: Exception) {
+                last = e
+            } finally {
+                conn.disconnect()
+            }
+        }
+        throw last ?: IllegalStateException("échec")
+    }
+
+    /** Télécharge les calendriers de la veille à J+7 ; chaque source qui échoue est simplement ignorée. */
+    internal fun downloadFixtures(now: Long): Fixtures {
+        fun fmt(p: String) = SimpleDateFormat(p, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        val days = (-1..7).map { now + it * DAY }
+        val dayKeys = days.map { Fixtures.dayOf(it) }
+        val months = days.map { fmt("yyyyMM").format(it) }.distinct()
+
+        class Job(val source: String, val covered: List<String>, val url: String, val f1: Boolean = false)
+        val jobs = ArrayList<Job>()
+        days.forEach { d -> jobs += Job("football", listOf(Fixtures.dayOf(d)), "$ESPN/soccer/all/scoreboard?dates=${fmt("yyyyMMdd").format(d)}&limit=900") }
+        for (m in months) {
+            val inMonth = dayKeys.filter { it.replace("-", "").startsWith(m) }
+            jobs += Job("nba", inMonth, "$ESPN/basketball/nba/scoreboard?dates=$m&limit=1000")
+            jobs += Job("nfl", inMonth, "$ESPN/football/nfl/scoreboard?dates=$m&limit=1000")
+            jobs += Job("nhl", inMonth, "$ESPN/hockey/nhl/scoreboard?dates=$m&limit=1000")
+            RUGBY_LEAGUES.forEach { jobs += Job("rugby", inMonth, "$ESPN/rugby/$it/scoreboard?dates=$m&limit=1000") }
+        }
+        jobs += Job("f1", dayKeys, "https://api.jolpi.ca/ergast/f1/current.json", f1 = true)
+
+        val pool = Executors.newFixedThreadPool(4)
+        try {
+            val results = pool.invokeAll(jobs.map { job ->
+                Callable<Pair<Job, List<Fixture>>?> {
+                    try {
+                        val body = get(job.url)
+                        job to (if (job.f1) FixtureParsers.formula1(body) else FixtureParsers.espn(body, job.source))
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }, 90, TimeUnit.SECONDS)
+            val list = ArrayList<Fixture>()
+            val covered = HashMap<String, MutableSet<String>>()
+            for (r in results) {
+                val (job, fixtures) = (try { if (r.isCancelled) null else r.get() } catch (e: Exception) { null }) ?: continue
+                list += fixtures
+                covered.getOrPut(job.source) { HashSet() } += job.covered
+            }
+            return Fixtures(list.distinct(), covered)
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    /** Programme recoupé avec les calendriers en cache : à utiliser partout (écran, widget, alertes). */
+    fun buildEvents(ctx: Context, guide: Guide): List<Event> =
+        Schedule.build(guide.broadcasts, LiveCheck(Fixtures.load(ctx.filesDir)))
 
     private fun download(): Guide {
         val conn = URL(GUIDE_URL).openConnection() as HttpURLConnection
@@ -72,7 +161,7 @@ object Repo {
     }
 
     private fun publish(ctx: Context, guide: Guide): Data {
-        val events = Schedule.build(guide.broadcasts)
+        val events = buildEvents(ctx, guide)
         val before = Catalogue.load(ctx.filesDir)
         val catalogue = before.merged(events)
         if (catalogue.teams.size != before.teams.size || catalogue.competitions.size != before.competitions.size) {
@@ -119,6 +208,8 @@ data class Settings(
     /** Diffusions pour lesquelles l'alerte a été activée ou coupée à la main (identifiants Event.id). */
     val alertOn: Set<String> = emptySet(),
     val alertOff: Set<String> = emptySet(),
+    /** N'afficher que les directs confirmés par un calendrier sportif. */
+    val verifiedOnly: Boolean = false,
 ) {
     private val sportKeys by lazy { favSports.map { norm(it) }.toSet() }
     private val competitionKeys by lazy { favCompetitions.map { competitionKeyOf(it) }.toSet() }
@@ -166,6 +257,7 @@ data class Settings(
         e.stop > now &&
             (showMagazines || e.kind == Kind.EVENT) &&
             (!hideReplays || !e.replay) &&
+            (!verifiedOnly || e.verified) &&
             (myChannels.isEmpty() || e.channels.any { it in myChannels }) &&
             (favSports.isEmpty() || isFavSport(e.sport) || isFavorite(e))
     }
@@ -182,6 +274,7 @@ data class Settings(
             .putInt("alertMinutes", alertMinutes)
             .putStringSet("alertOn", alertOn)
             .putStringSet("alertOff", alertOff)
+            .putBoolean("verifiedOnly", verifiedOnly)
             .apply()
     }
 
@@ -197,7 +290,7 @@ data class Settings(
                 set("favSports"), set("favCompetitions"), set("favTeams"), set("myChannels"),
                 p.getBoolean("hideReplays", true), p.getBoolean("showMagazines", false),
                 p.getBoolean("alertsEnabled", true), p.getInt("alertMinutes", 15),
-                set("alertOn"), set("alertOff"),
+                set("alertOn"), set("alertOff"), p.getBoolean("verifiedOnly", false),
             )
         }
     }

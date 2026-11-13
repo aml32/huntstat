@@ -134,26 +134,52 @@ class XmltvParserTest {
         }
     }
 
-    /** Contrôle sur un vrai guide : GUIDE_GZ=/chemin/xmltv_fr.xml.gz ./gradlew test */
+    /** Charge les calendriers téléchargés dans FIXTURES_DIR (soc_JJ.json, nba.json, nfl.json, nhl.json, rug_*.json, f1.json). */
+    private fun realFixtures(): Fixtures {
+        val dir = File(System.getenv("FIXTURES_DIR") ?: return Fixtures.EMPTY)
+        val list = ArrayList<Fixture>()
+        val days = HashMap<String, MutableSet<String>>()
+        dir.listFiles()?.sortedBy { it.name }?.forEach { f ->
+            val source = when {
+                f.name.startsWith("soc_") -> "football"
+                f.name.startsWith("rug_") -> "rugby"
+                f.name in setOf("nba.json", "nfl.json", "nhl.json") -> f.name.removeSuffix(".json")
+                f.name == "f1.json" -> "f1"
+                else -> return@forEach
+            }
+            val parsed = try { if (source == "f1") FixtureParsers.formula1(f.readText()) else FixtureParsers.espn(f.readText(), source) } catch (e: Exception) { emptyList() }
+            list += parsed
+            val set = days.getOrPut(source) { HashSet() }
+            if (f.name.startsWith("soc_")) set += "2026-11-" + f.name.substring(4, 6)
+            else (1..30).forEach { set += "2026-11-%02d".format(it) }
+        }
+        return Fixtures(list, days)
+    }
+
+    /** Contrôle sur un vrai guide et de vrais calendriers. */
     @Test fun realGuideReport() {
         val path = System.getenv("GUIDE_GZ")
         assumeTrue(path != null && File(path).exists())
-        val t0 = System.currentTimeMillis()
         val guide = GZIPInputStream(File(path!!).inputStream()).use { XmltvParser.parse(it) }
-        val events = Schedule.build(guide.broadcasts)
+        val fixtures = realFixtures()
+        System.getenv("FIXTURES_OUT")?.let { fixtures.save(File(it).apply { mkdirs() }) }
+        val check = LiveCheck(fixtures)
+        val events = Schedule.build(guide.broadcasts, check)
         val names = guide.channels.associate { it.id to it.name }
         val sb = StringBuilder()
-        sb.appendLine("parse ms=${System.currentTimeMillis() - t0} channels=${guide.channels.size} broadcasts=${guide.broadcasts.size} events=${events.size}")
         val ev = events.filter { it.kind == Kind.EVENT }
-        sb.appendLine("EVENT=${ev.size} live=${ev.count { !it.replay }} withTeams=${ev.count { it.hasTeams }}")
-        sb.appendLine("SPORTS " + ev.groupingBy { it.sport }.eachCount().entries.sortedByDescending { it.value }.joinToString { "${it.key}=${it.value}" })
-        sb.appendLine("COMPETITIONS")
-        ev.groupBy { competitionKey(it.sport, it.competition) }.entries.sortedByDescending { it.value.size }.take(150)
-            .forEach { sb.appendLine("  ${it.value.size}\t${it.value[0].sport}\t${it.value[0].competition}") }
-        sb.appendLine("SAMPLE LIVE")
-        ev.filter { !it.replay }.shuffled(java.util.Random(7)).take(120).sortedBy { it.start }.forEach {
-            sb.appendLine("  ${java.util.Date(it.start)} | ${it.sport} | ${it.competition} | ${it.headline} | ${it.detail} | ${it.channels.map { c -> names[c] }}")
+        sb.appendLine("fixtures=${fixtures.list.size} ${fixtures.list.groupingBy { it.source }.eachCount()}")
+        sb.appendLine("EVENT=${ev.size} shown=${ev.count { !it.replay }} verified=${ev.count { it.verified }} withTeams=${ev.count { it.hasTeams }}")
+        val firsts = guide.broadcasts.filter { it.kind == Kind.EVENT && it.home.isNotBlank() }
+        val byVerdict = firsts.groupBy { (LiveCheck.sourceOf(it) ?: "-") + " " + check.verdict(it) }
+        sb.appendLine("VERDICTS " + byVerdict.mapValues { it.value.size }.toSortedMap())
+        fun line(e: Event) = "  ${java.text.SimpleDateFormat("EEE dd HH:mm").format(e.start)} | ${e.sport} | ${e.competition} | ${e.headline} | ${e.detail} | ${e.channels.map { c -> names[c] }}"
+        for (sport in listOf("Football", "Rugby", "Basket-ball", "Formule 1", "Football américain", "Hockey")) {
+            sb.appendLine("== $sport VERIFIED"); ev.filter { it.sport == sport && it.verified }.forEach { sb.appendLine(line(it)) }
+            sb.appendLine("== $sport UNVERIFIED BUT SHOWN"); ev.filter { it.sport == sport && !it.verified && !it.replay }.forEach { sb.appendLine(line(it)) }
+            sb.appendLine("== $sport REPLAY (sample)"); ev.filter { it.sport == sport && it.replay }.shuffled(java.util.Random(3)).take(25).forEach { sb.appendLine(line(it)) }
         }
+        sb.appendLine("== OTHER SPORTS SHOWN"); ev.filter { it.sport !in setOf("Football", "Rugby", "Basket-ball", "Formule 1", "Football américain", "Hockey") && !it.replay }.forEach { sb.appendLine(line(it)) }
         File(System.getenv("GUIDE_REPORT") ?: "build/guide-report.txt").writeText(sb.toString())
         assertTrue(ev.size > 200)
     }

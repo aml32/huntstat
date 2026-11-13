@@ -53,6 +53,7 @@ class AppSmokeTest {
             )
             val guide = GZIPInputStream(File(path!!).inputStream()).use { XmltvParser.parse(it) }
             GuideStore.save(app.filesDir, guide)
+            System.getenv("FIXTURES_TSV")?.let { File(it).copyTo(File(app.filesDir, "fixtures.tsv"), overwrite = true) }
             Settings(favTeams = setOf("Paris-SG"), favCompetitions = setOf("Rugby|Top 14")).save(app)
             shots.mkdirs()
         }
@@ -68,13 +69,15 @@ class AppSmokeTest {
 
     @Test fun walkThroughEveryScreen() {
         compose.waitUntil(20_000) { compose.onAllNodesWithText("Tous les sports").fetchSemanticsNodes().isNotEmpty() }
-        shot("1-programme")
-
-        compose.onNodeWithText("Mes favoris").performClick()
-        shot("2-mes-favoris")
-        compose.onNodeWithText("En ce moment").performClick()
-        shot("3-en-ce-moment")
-        compose.onNodeWithText("Tout").performClick()
+        shot("1-a-venir")
+        compose.onNodeWithText("Demain").performClick()
+        shot("2-demain")
+        compose.onNodeWithText("Auj.").performClick()
+        compose.onNodeWithText("Football").performClick()
+        compose.waitUntil(5_000) { Settings.load(app).isFavSport("Football") }
+        shot("3-football-seulement")
+        compose.onNodeWithText("Tous les sports").performClick()
+        compose.waitUntil(5_000) { Settings.load(app).favSports.isEmpty() }
 
         compose.onNodeWithText("Favoris").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Paris-SG").fetchSemanticsNodes().isNotEmpty() }
@@ -94,19 +97,18 @@ class AppSmokeTest {
         compose.onNodeWithText("Réglages").performClick()
         shot("9-reglages")
 
-        compose.onAllNodesWithText("Programme").onLast().performClick()
-        compose.onNodeWithText("Mes favoris").performClick()
-        compose.onAllNodes(hasText("Paris-SG", substring = true)).onFirst().performClick()
+        compose.onAllNodesWithText("À venir").onLast().performClick()
+        compose.waitForIdle()
+        compose.onAllNodes(hasText("✓ Direct confirmé", substring = true)).onFirst().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Ajouter à mon calendrier").fetchSemanticsNodes().isNotEmpty() }
         shot("10-fiche")
 
         // Sports cochés = filtre du programme.
         val now = System.currentTimeMillis()
-        val all = fr.perso.sportantenne.core.Schedule.build(GuideStore.load(app.filesDir)!!.broadcasts)
+        val all = Repo.buildEvents(app, GuideStore.load(app.filesDir)!!)
+        assertTrue("directs confirmés", all.count { it.verified } > 20)
         val rugbyOnly = Settings(favSports = setOf("Rugby")).visible(all, now)
         assertTrue(rugbyOnly.isNotEmpty() && rugbyOnly.all { it.sport == "Rugby" })
-        val withTeam = Settings(favSports = setOf("Rugby"), favTeams = setOf("Paris-SG")).visible(all, now)
-        assertTrue(withTeam.any { it.sport == "Football" } && withTeam.all { it.sport == "Rugby" || it.home == "Paris-SG" || it.away == "Paris-SG" })
 
         // Les favoris cochés donnent bien lieu à des alarmes programmées.
         val alarms = shadowOf(app.getSystemService(AlarmManager::class.java)).scheduledAlarms

@@ -10,7 +10,6 @@ import android.widget.RemoteViews
 import fr.perso.sportantenne.core.Channel
 import fr.perso.sportantenne.core.Event
 import fr.perso.sportantenne.core.GuideStore
-import fr.perso.sportantenne.core.Schedule
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -23,7 +22,7 @@ class UpcomingWidget : AppWidgetProvider() {
             try {
                 val guide = GuideStore.load(context.filesDir)
                 render(
-                    context, guide?.let { Schedule.build(it.broadcasts) },
+                    context, guide?.let { Repo.buildEvents(context, it) },
                     guide?.channels?.associateBy { it.id } ?: emptyMap(), Settings.load(context),
                 )
             } finally {
