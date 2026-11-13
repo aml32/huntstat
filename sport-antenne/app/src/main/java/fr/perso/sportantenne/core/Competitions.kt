@@ -106,7 +106,7 @@ object Competitions {
         add(rugby, EU,
             "Champions Cup" to "champions cup|coupe d europe", "Challenge Cup" to "challenge cup|challenge europeen",
             "Tournoi des Six Nations" to "six nations(?! feminin| u)|6 nations(?! feminin| u)", "Six Nations féminin" to "six nations feminin|6 nations feminin",
-            "Six Nations U20" to "six nations u|6 nations u|moins de 20", "Rugby Europe Championship" to "rugby europe", "Premiership anglaise" to "premiership", "United Rugby Championship" to "united rugby|urc",
+            "Six Nations U20" to "(six|6) nations (u ?\\d+|des moins de \\d+)", "Rugby Europe Championship" to "rugby europe", "Premiership anglaise" to "premiership", "United Rugby Championship" to "united rugby|urc",
         )
         add(rugby, WORLD,
             "Coupe du monde féminine" to "coupe du monde feminine", "Coupe du monde U20" to "championnat du monde (u ?20|des moins de 20)|mondial u ?20",
