@@ -12,7 +12,10 @@ et la chaîne qui les diffuse. Sans pub, sans compte, sans achat.
 
 ## Données et fiabilité
 
-Deux familles de sources, recoupées à chaque mise à jour (ouverture, puis ~toutes les 4 h) :
+Deux familles de sources, recoupées **toutes les heures** (tâche de fond) et à chaque retour
+dans l'appli après plus d'une heure. Le guide TV n'est retéléchargé que s'il a changé (requête
+conditionnelle `If-None-Match`) ; les calendriers, légers, sont relus à chaque fois pour suivre
+reports, annulations et changements d'horaire.
 
 1. **Guide TV** XMLTV de [xmltvfr.fr](https://xmltvfr.fr) : ce qui passe sur quelle chaîne (≈ 5 jours).
    Sport, compétition et équipes sont déduits des titres (`core/XmltvParser.kt`).
@@ -25,12 +28,17 @@ heure-là est une **rediffusion** (masquée). Pour les sports sans calendrier (t
 des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.kt`) ; le réglage
 « Directs confirmés uniquement » les masque.
 
-Tests : `XmltvParserTest` (analyse), `AppSmokeTest` (lance la vraie activité sur un guide réel et
-parcourt les écrans), `LiveSourcesTest` (interroge les calendriers en ligne) :
+## Tests
 
-```
-GUIDE_GZ=/chemin/xmltv_fr.xml.gz SHOTS=/dossier LIVE_SOURCES=1 ./gradlew testDebugUnitTest
-```
+56 tests automatiques (`./gradlew testDebugUnitTest`) :
+
+- `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
+  annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `SettingsTest` — favoris, filtres, alertes.
+- `AppFlowsTest` — l'appli est lancée et manipulée comme par un utilisateur : cocher/décocher équipes,
+  compétitions, sports et chaînes, alertes (programmation, délai, annulation, notification unique),
+  calendrier, persistance, fichiers de cache corrompus.
+- `AppSmokeTest` — parcours de tous les écrans sur un guide réel (`GUIDE_GZ=…`, captures dans `SHOTS=…`).
+- `LiveSourcesTest`, `RefreshLiveTest` — vraies sources en ligne et mise à jour complète (`LIVE_SOURCES=1`).
 
 ## Installer
 

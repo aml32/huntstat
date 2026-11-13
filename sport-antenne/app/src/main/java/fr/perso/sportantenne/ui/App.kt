@@ -82,7 +82,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import fr.perso.sportantenne.AppState
 import fr.perso.sportantenne.core.Channel
@@ -129,7 +128,7 @@ private enum class Screen(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun SportAntenneApp(state: AppState = viewModel()) {
+fun SportAntenneApp(state: AppState) {
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkScheme else LightScheme) {
         var screen by rememberSaveable { mutableIntStateOf(0) }
         var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -191,8 +190,8 @@ fun SportAntenneApp(state: AppState = viewModel()) {
 
 @Composable
 private fun ProgrammeScreen(events: List<Event>, state: AppState, now: Long, onOpen: (Event) -> Unit) {
-    var mineOnly by rememberSaveable { mutableStateOf(false) }
     val settings = state.settings
+    val mineOnly = settings.favoritesOnly
     val scoped = remember(events, mineOnly, settings) { if (mineOnly) events.filter { settings.isFavorite(it) } else events }
     // Sports proposés : tous ceux du programme, y compris ceux actuellement masqués par le filtre.
     val sports = remember(state.events, settings.myChannels, settings.hideReplays, settings.verifiedOnly, now) {
@@ -223,7 +222,7 @@ private fun ProgrammeScreen(events: List<Event>, state: AppState, now: Long, onO
         }
         // Sports à cocher : le choix est mémorisé et filtre tout le programme.
         LazyRow(contentPadding = PaddingValues(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { FilterChip(mineOnly, { mineOnly = !mineOnly }, { Text("★ Mes favoris", fontWeight = FontWeight.Bold) }) }
+            item { FilterChip(mineOnly, { state.update { it.copy(favoritesOnly = !it.favoritesOnly) } }, { Text("★ Mes favoris", fontWeight = FontWeight.Bold) }) }
             item { FilterChip(settings.favSports.isEmpty(), { state.update { it.copy(favSports = emptySet()) } }, { Text("Tous les sports") }) }
             items(sports) { s -> FilterChip(settings.isFavSport(s), { state.update { it.toggleSport(s) } }, { Text(s) }) }
         }
@@ -477,7 +476,7 @@ private fun SettingsScreen(state: AppState) {
         Text(
             (if (state.lastUpdate == 0L) "Programme jamais chargé."
             else "Dernière mise à jour : " + SimpleDateFormat("EEEE d MMMM 'à' HH:mm", Locale.FRENCH).format(Date(state.lastUpdate)) + ".") +
-                "\nLe programme se met à jour tout seul, à l'ouverture et environ toutes les 4 heures.",
+                "\nLe programme se revérifie tout seul toutes les heures : reports, annulations et changements d'horaire ou de chaîne.",
             Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium,
         )
         OutlinedButton(onClick = state::refresh, enabled = !state.loading, modifier = Modifier.padding(16.dp)) {

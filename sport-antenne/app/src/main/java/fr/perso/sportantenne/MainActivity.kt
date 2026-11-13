@@ -13,7 +13,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.activity.viewModels
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import fr.perso.sportantenne.core.Catalogue
 import fr.perso.sportantenne.core.Channel
@@ -23,6 +26,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    // Fabrique explicite : l'état est toujours construit avec l'application courante.
+    private val state: AppState by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = AppState(application) as T
+        }
+    }
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,7 +44,13 @@ class MainActivity : ComponentActivity() {
         ) {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        setContent { SportAntenneApp() }
+        setContent { SportAntenneApp(state) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Retour dans l'appli : on revérifie si la dernière mise à jour date de plus d'une heure.
+        state.refreshIfStale()
     }
 }
 
@@ -66,6 +82,10 @@ class AppState(app: Application) : AndroidViewModel(app) {
         catalogue = data.catalogue
         events = data.events
         lastUpdate = data.updated
+    }
+
+    fun refreshIfStale() {
+        if (lastUpdate != 0L && System.currentTimeMillis() - lastUpdate > Repo.STALE_MS) refresh()
     }
 
     fun refresh() {

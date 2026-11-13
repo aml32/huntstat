@@ -41,11 +41,13 @@ class Data(val events: List<Event>, val channels: Map<String, Channel>, val cata
 /** Téléchargement du guide, cache local et mise à jour en arrière-plan. */
 object Repo {
     const val GUIDE_URL = "https://xmltvfr.fr/xmltv/xmltv_fr.xml.gz"
-    const val STALE_MS = 3 * 60 * 60 * 1000L
+    const val STALE_MS = 60 * 60 * 1000L
 
-    /** Télécharge le guide (3 essais), le met en cache, puis recale widget et alertes. */
+    /**
+     * Mise à jour complète : calendriers réels (reports, annulations, changements d'horaire),
+     * puis guide TV (changements de chaîne). Le guide n'est retéléchargé que s'il a changé.
+     */
     suspend fun refresh(ctx: Context): Data = withContext(Dispatchers.IO) {
-        // Calendriers réels d'abord : ils servent à distinguer les directs des rediffusions.
         // En cas d'échec, les calendriers déjà en cache restent utilisés.
         try {
             val now = System.currentTimeMillis()
@@ -54,11 +56,18 @@ object Repo {
         } catch (e: Exception) {
             // rien : la vérification retombe sur le cache
         }
+        val prefs = ctx.getSharedPreferences(STATE, Context.MODE_PRIVATE)
         var failure: Exception? = null
         repeat(3) { attempt ->
             try {
-                val guide = download()
-                GuideStore.save(ctx.filesDir, guide)
+                val cached = GuideStore.load(ctx.filesDir)
+                val download = download(if (cached != null) prefs.getString("etag", null) else null)
+                val guide = if (download == null) cached!! else {
+                    GuideStore.save(ctx.filesDir, download.first)
+                    prefs.edit().putString("etag", download.second).apply()
+                    download.first
+                }
+                prefs.edit().putLong("checked", System.currentTimeMillis()).apply()
                 return@withContext publish(ctx, guide)
             } catch (e: Exception) {
                 failure = e
@@ -68,6 +77,11 @@ object Repo {
         throw failure ?: IllegalStateException("Téléchargement impossible")
     }
 
+    /** Heure de la dernière vérification réussie auprès des sources. */
+    fun lastCheck(ctx: Context): Long =
+        ctx.getSharedPreferences(STATE, Context.MODE_PRIVATE).getLong("checked", 0L)
+
+    private const val STATE = "refresh"
     private const val DAY = 86_400_000L
     private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports"
     private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "289234", "270560", "242041", "244293", "267979")
@@ -139,18 +153,22 @@ object Repo {
     fun buildEvents(ctx: Context, guide: Guide): List<Event> =
         Schedule.build(guide.broadcasts, LiveCheck(Fixtures.load(ctx.filesDir)))
 
-    private fun download(): Guide {
+    /** Renvoie le guide et son empreinte, ou null si le serveur indique qu'il n'a pas changé. */
+    private fun download(etag: String?): Pair<Guide, String?>? {
         val conn = URL(GUIDE_URL).openConnection() as HttpURLConnection
         conn.connectTimeout = 20_000
         conn.readTimeout = 60_000
-        conn.setRequestProperty("User-Agent", "SportAntenne/1.1 (Android)")
+        conn.setRequestProperty("User-Agent", "SportAntenne/1.3 (Android)")
+        if (etag != null) conn.setRequestProperty("If-None-Match", etag)
         try {
-            if (conn.responseCode != 200) error("le guide TV a répondu ${conn.responseCode}")
+            val code = conn.responseCode
+            if (code == HttpURLConnection.HTTP_NOT_MODIFIED) return null
+            if (code != 200) error("le guide TV a répondu $code")
             // Le passé récent est conservé : il sert à reconnaître les rediffusions.
             val guide = GZIPInputStream(conn.inputStream, 1 shl 16).use { XmltvParser.parse(it) }
             // Un guide tronqué ou vide ne doit jamais écraser un bon cache.
             if (guide.broadcasts.count { it.kind == Kind.EVENT } < 50 || guide.channels.size < 20) error("guide TV incomplet")
-            return guide
+            return guide to conn.getHeaderField("ETag")
         } finally {
             conn.disconnect()
         }
@@ -171,11 +189,11 @@ object Repo {
         val settings = Settings.load(ctx)
         UpcomingWidget.render(ctx, events, channels, settings)
         Alerts.reschedule(ctx, events, channels, settings)
-        return Data(events, channels, catalogue, GuideStore.lastUpdate(ctx.filesDir))
+        return Data(events, channels, catalogue, lastCheck(ctx).takeIf { it > 0 } ?: GuideStore.lastUpdate(ctx.filesDir))
     }
 
     fun scheduleBackgroundRefresh(ctx: Context) {
-        val request = PeriodicWorkRequestBuilder<RefreshWorker>(4, TimeUnit.HOURS)
+        val request = PeriodicWorkRequestBuilder<RefreshWorker>(1, TimeUnit.HOURS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()
         WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("guide-refresh", ExistingPeriodicWorkPolicy.UPDATE, request)
@@ -210,6 +228,8 @@ data class Settings(
     val alertOff: Set<String> = emptySet(),
     /** N'afficher que les directs confirmés par un calendrier sportif. */
     val verifiedOnly: Boolean = false,
+    /** Bouton « Mes favoris » de l'écran À venir : mémorisé d'une ouverture à l'autre. */
+    val favoritesOnly: Boolean = false,
 ) {
     private val sportKeys by lazy { favSports.map { norm(it) }.toSet() }
     private val competitionKeys by lazy { favCompetitions.map { competitionKeyOf(it) }.toSet() }
@@ -275,6 +295,7 @@ data class Settings(
             .putStringSet("alertOn", alertOn)
             .putStringSet("alertOff", alertOff)
             .putBoolean("verifiedOnly", verifiedOnly)
+            .putBoolean("favoritesOnly", favoritesOnly)
             .apply()
     }
 
@@ -291,6 +312,7 @@ data class Settings(
                 p.getBoolean("hideReplays", true), p.getBoolean("showMagazines", false),
                 p.getBoolean("alertsEnabled", true), p.getInt("alertMinutes", 15),
                 set("alertOn"), set("alertOff"), p.getBoolean("verifiedOnly", false),
+                p.getBoolean("favoritesOnly", false),
             )
         }
     }
