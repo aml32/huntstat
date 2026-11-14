@@ -23,7 +23,7 @@ class LiveCheck(private val fixtures: Fixtures) {
     private val bestCache = HashMap<String, Int>()
 
     /** Verdict et, pour un direct confirmé, les logos des deux équipes dans l'ordre du guide. */
-    class Resolution(val verdict: Verdict, val homeLogo: String = "", val awayLogo: String = "")
+    class Resolution(val verdict: Verdict, val homeLogo: String = "", val awayLogo: String = "", val score: Score? = null)
 
     fun verdict(b: Broadcast): Verdict = resolve(b).verdict
 
@@ -55,7 +55,10 @@ class LiveCheck(private val fixtures: Fixtures) {
                 (strongH && bestA < 2) || (strongA && bestH < 2)
             if (!samePair) continue
             if (inWindow(b, e.f.start)) {
-                return if (straight) Resolution(Verdict.LIVE, e.f.homeLogo, e.f.awayLogo) else Resolution(Verdict.LIVE, e.f.awayLogo, e.f.homeLogo)
+                val f = e.f
+                val known = f.state == "in" || f.state == "post"
+                return if (straight) Resolution(Verdict.LIVE, f.homeLogo, f.awayLogo, if (known) Score(f.homeScore, f.awayScore, f.state, f.clock) else null)
+                else Resolution(Verdict.LIVE, f.awayLogo, f.homeLogo, if (known) Score(f.awayScore, f.homeScore, f.state, f.clock) else null)
             }
             if (strongH && strongA) pairElsewhere = true
         }
@@ -172,9 +175,11 @@ class LiveCheck(private val fixtures: Fixtures) {
         }
 
         /** Quelle source de calendrier peut vérifier cette diffusion, le cas échéant. */
-        fun sourceOf(b: Broadcast): String? {
-            val comp = norm(b.competition)
-            return when (norm(b.sport)) {
+        fun sourceOf(b: Broadcast): String? = sourceOf(b.sport, b.competition)
+
+        fun sourceOf(sport: String, competition: String): String? {
+            val comp = norm(competition)
+            return when (norm(sport)) {
                 "football" -> "football"
                 "basket ball" -> if (Regex("\\bnba\\b").containsMatchIn(comp) && !comp.contains("wnba")) "nba" else null
                 "football americain" -> if (Regex("\\bnfl\\b").containsMatchIn(comp)) "nfl" else null

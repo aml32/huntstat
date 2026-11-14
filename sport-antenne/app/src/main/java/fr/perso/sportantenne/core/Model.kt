@@ -22,6 +22,12 @@ data class Broadcast(
     val previouslyShown: Boolean,
 )
 
+/** Score d'un match, dans l'ordre d'affichage des équipes. */
+data class Score(val home: String, val away: String, val state: String, val clock: String) {
+    val finished get() = state == "post"
+    val text get() = "$home – $away"
+}
+
 /** Un événement affiché : une ou plusieurs diffusions simultanées regroupées. */
 data class Event(
     val key: String,
@@ -44,6 +50,8 @@ data class Event(
     val awayLogo: String = "",
     /** Détail de l'épreuve : hommes/femmes/mixte, format, distance, lieu. */
     val race: RaceInfo = RaceInfo(),
+    /** Score en direct ou final, quand le calendrier le fournit. */
+    val score: Score? = null,
 ) {
     val hasTeams get() = home.isNotBlank() && away.isNotBlank()
     val headline get() = if (hasTeams) "$home – $away" else title
@@ -165,7 +173,7 @@ object Schedule {
                     channels = listOf(b.channelId),
                     verified = verdict == Verdict.LIVE,
                     homeLogo = resolution?.homeLogo ?: "", awayLogo = resolution?.awayLogo ?: "",
-                    race = Races.parse(b),
+                    race = Races.parse(b), score = resolution?.score,
                 )
             }
         }

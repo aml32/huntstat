@@ -1,5 +1,6 @@
 package fr.perso.sportantenne
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -16,5 +17,17 @@ class LiveSourcesTest {
             assertTrue("$source couvert", (fixtures.coveredDays[source]?.size ?: 0) >= 9)
         }
         assertTrue("rugby couvert", fixtures.coveredDays.containsKey("rugby"))
+        // Des matchs déjà joués portent un score.
+        val played = fixtures.list.filter { it.state == "post" }
+        println("SCORES ${played.size} terminés, ex. ${played.take(3).map { "${it.home} ${it.homeScore}-${it.awayScore} ${it.away} (${it.clock})" }}")
+        assertTrue(played.size > 20 && played.all { it.homeScore.isNotEmpty() && it.awayScore.isNotEmpty() })
+        assertTrue(fixtures.list.filter { it.state == "pre" }.all { it.homeScore.isEmpty() })
+
+        // Rafraîchissement léger pendant les matchs : seulement les sources demandées, veille et jour même.
+        val live = Repo.downloadFixtures(System.currentTimeMillis(), setOf("football", "nba"))
+        println("LIVE ${live.list.groupingBy { it.source }.eachCount()} covered=${live.coveredDays.mapValues { it.value.size }}")
+        assertEquals(setOf("football", "nba"), live.coveredDays.keys)
+        assertTrue(live.coveredDays.values.all { it.size == 2 })
+        assertTrue(live.list.isNotEmpty())
     }
 }

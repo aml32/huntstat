@@ -18,6 +18,12 @@ et la chaîne qui les diffuse. Sans pub, sans compte, sans achat.
   sports mécaniques, tours de tournoi), distance et lieu, lus dans les libellés du guide.
   Le biathlon n'a pas de calendrier indépendant : le serveur de l'IBU exige une authentification.
 - **Plusieurs chaînes** : toutes les chaînes d'une même diffusion sont listées, une par ligne.
+- **Scores** : pendant un match confirmé, le score et la minute de jeu sont relus toutes les minutes
+  tant que l'appli est à l'écran ; à la fin, le résultat reste affiché. Le réglage « Matchs terminés »
+  fixe combien de temps (dès la fin, 1 h, 4 h, 12 h, tous).
+- **Logos de chaînes** (`core/ChannelLogos.kt`) : table de logos vérifiés un par un dans le dépôt public
+  tv-logo/tv-logos, puis logo de la marque pour les déclinaisons, puis adresse fournie par le guide ;
+  si rien ne répond, le nom de la chaîne est écrit dans le cadre.
 - **Chaînes** : cocher les chaînes reçues pour masquer les autres.
 - **Alertes** : notification avant chaque direct d'une compétition cochée (délai réglable), ou match par match.
 - Ajout au calendrier avec la chaîne dans le titre, widget d'accueil.
@@ -42,7 +48,7 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-75 tests automatiques (`./gradlew testDebugUnitTest`) :
+79 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;

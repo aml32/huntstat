@@ -50,7 +50,13 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // Retour dans l'appli : on revérifie si la dernière mise à jour date de plus d'une heure.
+        state.foreground = true
         state.refreshIfStale()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        state.foreground = false
     }
 }
 
@@ -70,7 +76,21 @@ class AppState(app: Application) : AndroidViewModel(app) {
     var lastUpdate by mutableLongStateOf(0L)
         private set
 
+    /** L'appli est à l'écran : les scores ne sont rafraîchis que dans ce cas. */
+    @Volatile var foreground = false
+
     init {
+        // Pendant un match confirmé, les scores sont relus toutes les minutes.
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60_000)
+                if (!foreground || loading || !Repo.liveUpdates) continue
+                val now = System.currentTimeMillis()
+                val sources = events.filter { it.verified && it.score?.finished != true && now >= it.start - 15 * 60_000 && now <= it.stop + 45 * 60_000 }
+                    .mapNotNull { e -> fr.perso.sportantenne.core.LiveCheck.sourceOf(e.sport, e.competition) }.toSet()
+                try { Repo.refreshLive(app, sources)?.let { show(it) } } catch (e: Exception) { /* prochain essai dans une minute */ }
+            }
+        }
         viewModelScope.launch {
             Repo.load(app)?.let { show(it) }
             if (events.isEmpty() || System.currentTimeMillis() - lastUpdate > Repo.STALE_MS) refresh()

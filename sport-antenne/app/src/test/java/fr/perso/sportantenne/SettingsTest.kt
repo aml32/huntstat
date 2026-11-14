@@ -89,9 +89,22 @@ class SettingsTest {
         assertEquals(listOf("Arsenal"), homes(s))
     }
 
-    @Test fun pastEventsAreNeverShown() {
-        assertTrue(Settings().visible(listOf(event(start = now - 3 * 3_600_000)), now).isEmpty())
-        assertEquals("un match en cours reste affiché", 1, Settings().visible(listOf(event(start = now - 600_000)), now).size)
+    @Test fun finishedMatchesStayForTheChosenDuration() {
+        val h = 3_600_000L
+        // Chaque match dure 2 h : terminé depuis 30 min, 3 h et 20 h ; plus un match en cours.
+        val list = listOf(
+            event(home = "A", start = now - 2 * h - h / 2), event(home = "B", start = now - 5 * h),
+            event(home = "C", start = now - 22 * h), event(home = "D", start = now - 600_000),
+        )
+        fun homes(keep: Int) = Settings(keepFinishedMin = keep).visible(list, now).map { it.home }
+        assertEquals("par défaut : une heure", listOf("A", "D"), Settings().visible(list, now).map { it.home })
+        assertEquals(listOf("D"), homes(0))
+        assertEquals(listOf("A", "D"), homes(60))
+        assertEquals(listOf("A", "B", "D"), homes(240))
+        assertEquals(listOf("A", "B", "D"), homes(720))
+        assertEquals(listOf("A", "B", "C", "D"), homes(Settings.KEEP_ALL))
+        // Un match terminé ne donne jamais lieu à une alerte programmée : seuls les débuts à venir comptent.
+        assertTrue(list.none { it.start > now })
     }
 
     @Test fun replaysMagazinesAndVerifiedOnlyFollowTheSwitches() {

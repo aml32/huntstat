@@ -40,7 +40,7 @@ class UpcomingWidget : AppWidgetProvider() {
             val ids = manager.getAppWidgetIds(ComponentName(ctx, UpcomingWidget::class.java))
             if (ids.isEmpty()) return
             val now = System.currentTimeMillis()
-            val all = settings.visible(events ?: emptyList(), now)
+            val all = settings.visible(events ?: emptyList(), now).filter { it.stop > now } // le widget n'annonce que l'à-venir
             val shown = all.take(ROWS.size)
 
             val views = RemoteViews(ctx.packageName, R.layout.widget)

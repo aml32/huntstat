@@ -77,6 +77,23 @@ object Repo {
         throw failure ?: IllegalStateException("Téléchargement impossible")
     }
 
+    /** Mise à jour des scores pendant les matchs ; les tests la coupent pour ne pas dépendre du réseau. */
+    @Volatile var liveUpdates = true
+
+    /**
+     * Rafraîchissement léger pendant les matchs : seuls les calendriers des sources concernées
+     * sont relus (aujourd'hui et la veille en heure universelle), le guide TV n'est pas retéléchargé.
+     * Renvoie null si rien n'a pu être lu.
+     */
+    suspend fun refreshLive(ctx: Context, sources: Set<String>): Data? = withContext(Dispatchers.IO) {
+        if (sources.isEmpty()) return@withContext null
+        val now = System.currentTimeMillis()
+        val fresh = try { downloadFixtures(now, sources) } catch (e: Exception) { return@withContext null }
+        if (fresh.list.isEmpty()) return@withContext null
+        Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir)
+        GuideStore.load(ctx.filesDir)?.let { publish(ctx, it) }
+    }
+
     /** Heure de la dernière vérification réussie auprès des sources. */
     fun lastCheck(ctx: Context): Long =
         ctx.getSharedPreferences(STATE, Context.MODE_PRIVATE).getLong("checked", 0L)
@@ -105,14 +122,17 @@ object Repo {
         throw last ?: IllegalStateException("échec")
     }
 
-    /** Télécharge les calendriers de la veille à J+7 ; chaque source qui échoue est simplement ignorée. */
-    internal fun downloadFixtures(now: Long): Fixtures {
+    /**
+     * Télécharge les calendriers ; chaque source qui échoue est simplement ignorée.
+     * Sans [live] : toutes les sources, de la veille à J+7. Avec : seulement ces sources, veille et jour même.
+     */
+    internal fun downloadFixtures(now: Long, live: Set<String>? = null): Fixtures {
         fun fmt(p: String) = SimpleDateFormat(p, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        if (live != null) return downloadLive(now, live, fmt("yyyyMMdd"))
         val days = (-1..7).map { now + it * DAY }
         val dayKeys = days.map { Fixtures.dayOf(it) }
         val months = days.map { fmt("yyyyMM").format(it) }.distinct()
 
-        class Job(val source: String, val covered: List<String>, val url: String, val f1: Boolean = false)
         val jobs = ArrayList<Job>()
         days.forEach { d -> jobs += Job("football", listOf(Fixtures.dayOf(d)), "$ESPN/soccer/all/scoreboard?dates=${fmt("yyyyMMdd").format(d)}&limit=900") }
         for (m in months) {
@@ -124,6 +144,26 @@ object Repo {
         }
         jobs += Job("f1", dayKeys, "https://api.jolpi.ca/ergast/f1/current.json", f1 = true)
 
+        return run(jobs)
+    }
+
+    private class Job(val source: String, val covered: List<String>, val url: String, val f1: Boolean = false)
+
+    private fun downloadLive(now: Long, sources: Set<String>, day: SimpleDateFormat): Fixtures {
+        val jobs = ArrayList<Job>()
+        for (d in listOf(now - DAY, now)) {
+            val key = listOf(Fixtures.dayOf(d))
+            val date = day.format(d)
+            if ("football" in sources) jobs += Job("football", key, "$ESPN/soccer/all/scoreboard?dates=$date&limit=900")
+            if ("nba" in sources) jobs += Job("nba", key, "$ESPN/basketball/nba/scoreboard?dates=$date&limit=200")
+            if ("nfl" in sources) jobs += Job("nfl", key, "$ESPN/football/nfl/scoreboard?dates=$date&limit=200")
+            if ("nhl" in sources) jobs += Job("nhl", key, "$ESPN/hockey/nhl/scoreboard?dates=$date&limit=200")
+            if ("rugby" in sources) RUGBY_LEAGUES.forEach { jobs += Job("rugby", key, "$ESPN/rugby/$it/scoreboard?dates=$date&limit=200") }
+        }
+        return run(jobs)
+    }
+
+    private fun run(jobs: List<Job>): Fixtures {
         val pool = Executors.newFixedThreadPool(4)
         try {
             val results = pool.invokeAll(jobs.map { job ->
@@ -230,6 +270,8 @@ data class Settings(
     val alertOff: Set<String> = emptySet(),
     /** N'afficher que les directs confirmés par un calendrier sportif. */
     val verifiedOnly: Boolean = false,
+    /** Durée de conservation des matchs terminés, en minutes ; [KEEP_ALL] = tant que le guide les contient. */
+    val keepFinishedMin: Int = 60,
 ) {
     private val sportKeys by lazy { favSports.map { norm(it) }.toSet() }
     private val competitionsBySport: Map<String, Set<String>> by lazy {
@@ -279,7 +321,7 @@ data class Settings(
 
     /** Filtre commun : à venir ou en cours, directs, puis favoris (sports, compétitions, chaînes). */
     fun visible(events: List<Event>, now: Long): List<Event> = events.filter { e ->
-        e.stop > now &&
+        (keepFinishedMin == KEEP_ALL || e.stop > now - keepFinishedMin * 60_000L) &&
             (showMagazines || e.kind == Kind.EVENT) &&
             (!hideReplays || !e.replay) &&
             (!verifiedOnly || e.verified) &&
@@ -299,11 +341,13 @@ data class Settings(
             .putStringSet("alertOn", alertOn)
             .putStringSet("alertOff", alertOff)
             .putBoolean("verifiedOnly", verifiedOnly)
+            .putInt("keepFinishedMin", keepFinishedMin)
             .apply()
     }
 
     companion object {
         private const val PREFS = "settings"
+        const val KEEP_ALL = -1
 
         fun load(ctx: Context): Settings {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -314,7 +358,7 @@ data class Settings(
                 set("favSports"), competitions, set("myChannels"),
                 p.getBoolean("hideReplays", true), p.getBoolean("showMagazines", false),
                 p.getBoolean("alertsEnabled", true), p.getInt("alertMinutes", 15),
-                set("alertOn"), set("alertOff"), p.getBoolean("verifiedOnly", false),
+                set("alertOn"), set("alertOff"), p.getBoolean("verifiedOnly", false), p.getInt("keepFinishedMin", 60),
             )
         }
     }

@@ -17,6 +17,12 @@ data class Fixture(
     /** Adresses des logos des deux équipes, quand le calendrier les fournit. */
     val homeLogo: String = "",
     val awayLogo: String = "",
+    /** Score et état du match : « pre » (à venir), « in » (en cours), « post » (terminé). */
+    val homeScore: String = "",
+    val awayScore: String = "",
+    val state: String = "",
+    /** Repère de jeu donné par le calendrier : « 67' », « HT », « FT », « Q3 4:12 »… */
+    val clock: String = "",
 )
 
 /** Les calendriers téléchargés et les jours qu'ils couvrent réellement (source → jours AAAA-MM-JJ, UTC). */
@@ -26,7 +32,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
         tmp.bufferedWriter().use { w ->
             coveredDays.forEach { (source, days) -> days.forEach { w.write("D\t$source\t$it\n") } }
             list.forEach { f ->
-                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league), clean(f.homeLogo), clean(f.awayLogo)).joinToString("\t"))
+                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league), clean(f.homeLogo), clean(f.awayLogo), clean(f.homeScore), clean(f.awayScore), clean(f.state), clean(f.clock)).joinToString("\t"))
                 w.write("\n")
             }
         }
@@ -58,7 +64,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
             f.forEachLine { line ->
                 val p = line.split('\t')
                 if (p[0] == "D" && p.size >= 3) days.getOrPut(p[1]) { HashSet() } += p[2]
-                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5], p.getOrElse(6) { "" }, p.getOrElse(7) { "" }) }
+                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5], p.getOrElse(6) { "" }, p.getOrElse(7) { "" }, p.getOrElse(8) { "" }, p.getOrElse(9) { "" }, p.getOrElse(10) { "" }, p.getOrElse(11) { "" }) }
             }
             return Fixtures(list, days)
         }
@@ -90,15 +96,22 @@ object FixtureParsers {
             var away = ""
             var homeLogo = ""
             var awayLogo = ""
+            var homeScore = ""
+            var awayScore = ""
+            val type = comp.optJSONObject("status")?.optJSONObject("type")
+            val state = type?.optString("state") ?: ""
+            val clock = if (state == "pre") "" else type?.optString("shortDetail") ?: ""
             for (k in 0 until 2) {
                 val c = teams.optJSONObject(k) ?: continue
                 val team = c.optJSONObject("team")
                 val name = team?.optString("displayName") ?: ""
                 val logo = team?.optString("logo")?.takeIf { it.startsWith("https://") } ?: ""
-                if (c.optString("homeAway") == "away" || home.isNotEmpty()) { away = name; awayLogo = logo } else { home = name; homeLogo = logo }
+                // Avant le coup d'envoi le calendrier renvoie « 0 » : on n'affiche un score qu'une fois le match lancé.
+                val score = if (state == "pre") "" else c.optString("score", "")
+                if (c.optString("homeAway") == "away" || home.isNotEmpty()) { away = name; awayLogo = logo; awayScore = score } else { home = name; homeLogo = logo; homeScore = score }
             }
             if (home.isBlank() || away.isBlank()) continue
-            out += Fixture(source, start, home, away, comp.optString("altGameNote", ""), homeLogo, awayLogo)
+            out += Fixture(source, start, home, away, comp.optString("altGameNote", ""), homeLogo, awayLogo, homeScore, awayScore, state, clock)
         }
         return out
     }

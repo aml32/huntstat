@@ -64,6 +64,8 @@ class AppSmokeTest {
 
     private fun shot(name: String) {
         compose.waitForIdle()
+        Thread.sleep(2500) // laisse aux logos le temps d'arriver du réseau
+        compose.waitForIdle()
         compose.onAllNodes(isRoot()).onLast().captureRoboImage(File(shots, "$name.png").path)
     }
 

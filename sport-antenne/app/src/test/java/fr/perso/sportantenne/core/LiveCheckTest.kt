@@ -113,6 +113,56 @@ class LiveCheckTest {
         assertEquals("", Schedule.build(listOf(match("Toulouse", "Strasbourg")), c).single().homeLogo)
     }
 
+    @Test fun scoresFollowTheGuideOrderAndTheMatchState() {
+        fun event(home: String, hs: String, away: String, aw: String, state: String, detail: String) =
+            """{"competitions":[{"date":"2026-11-14T20:15Z","status":{"type":{"name":"STATUS_X","state":"$state","shortDetail":"$detail"}},"competitors":[
+               {"homeAway":"home","score":"$hs","team":{"displayName":"$home"}},{"homeAway":"away","score":"$aw","team":{"displayName":"$away"}}]}]}"""
+        val json = """{"events":[${event("Lyon", "2", "Lille", "1", "in", "67'")},${event("Nice", "0", "Lens", "3", "post", "FT")},
+            ${event("Brest", "0", "Nantes", "0", "pre", "Sat, November 14th")}]}"""
+        val c = LiveCheck(Fixtures(FixtureParsers.espn(json, "football"), mapOf("football" to setOf(day))))
+        // Le guide écrit « Lille – Lyon » : le score est retourné dans cet ordre.
+        val lille = Schedule.build(listOf(match("Lille", "Lyon")), c).single()
+        assertEquals(Score("1", "2", "in", "67'"), lille.score)
+        assertEquals("1 – 2", lille.score!!.text)
+        assertFalse(lille.score!!.finished)
+        val nice = Schedule.build(listOf(match("Nice", "Lens")), c).single()
+        assertEquals(Score("0", "3", "post", "FT"), nice.score)
+        assertTrue(nice.score!!.finished)
+        // Avant le coup d'envoi : pas de « 0 – 0 » trompeur.
+        assertEquals(null, Schedule.build(listOf(match("Brest", "Nantes")), c).single().score)
+        // Sans calendrier : pas de score.
+        assertEquals(null, Schedule.build(listOf(match("Lille", "Lyon"))).single().score)
+    }
+
+    @Test fun scoresSurviveTheLocalCache() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "sa-sc-${System.nanoTime()}").apply { mkdirs() }
+        try {
+            val f = Fixture("football", t0, "Lille", "Lyon", "Ligue 1", "https://a/1.png", "https://a/2.png", "3", "2", "post", "FT")
+            Fixtures(listOf(f), mapOf("football" to setOf(day))).save(dir)
+            assertEquals(f, Fixtures.load(dir).list.single())
+            // Un cache écrit par une version précédente (sans score) reste lisible.
+            File(dir, "fixtures.tsv").writeText("F\tfootball\t$t0\tLille\tLyon\tLigue 1\n")
+            assertEquals(Fixture("football", t0, "Lille", "Lyon", "Ligue 1"), Fixtures.load(dir).list.single())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test fun channelLogoCandidates() {
+        val canal = Channel("CanalPlusSport.fr", "Canal+ Sport", "https://guide/canal.png")
+        val list = ChannelLogos.candidates(canal, canal.id)
+        assertTrue(list.first().endsWith("/france/canal-plus-sport-fr.png"))
+        assertEquals("https://guide/canal.png", list.last())
+        // Famille de chaînes sans fichier propre : le logo de la marque, puis l'adresse du guide.
+        val bein = Channel("beINSPORTSMAX7.fr", "beIN SPORTS MAX 7", "https://guide/bein.png")
+        assertEquals(listOf("bein-sports-fr.png", "bein.png"), ChannelLogos.candidates(bein, bein.id).map { it.substringAfterLast('/') })
+        assertTrue(ChannelLogos.hasVerified(bein, bein.id))
+        // Chaîne inconnue : seulement l'adresse du guide ; adresse non sécurisée ou absente : rien.
+        assertEquals(listOf("https://guide/x.png"), ChannelLogos.candidates(Channel("x", "Télé Locale", "https://guide/x.png"), "x"))
+        assertTrue(ChannelLogos.candidates(Channel("x", "Télé Locale", "http://guide/x.png"), "x").isEmpty())
+        assertTrue(ChannelLogos.candidates(null, "inconnue").isEmpty())
+    }
+
     @Test fun malformedCalendarsDoNotCrash() {
         assertTrue(FixtureParsers.espn("{}", "football").isEmpty())
         assertTrue(FixtureParsers.espn("""{"events":[{"competitions":[]},{"competitions":[{"competitors":[{}]}]}]}""", "football").isEmpty())

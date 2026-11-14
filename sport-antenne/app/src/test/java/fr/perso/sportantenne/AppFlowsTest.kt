@@ -68,6 +68,8 @@ class AppFlowsTest {
         listOf(Channel("c1", "Canal Test", ""), Channel("c2", "beIN Test", "")),
         listOf(
             b("Monaco", "Rennes", -20, "c1"),            // en cours, confirmé
+            b("Nantes", "Brest", -150, "c1"),            // terminé depuis 30 minutes
+            b("Reims", "Metz", -300, "c2"),              // terminé depuis 3 heures
             b("Lille", "Lyon", 30, "c1"),                // confirmé
             b("Paris-SG", "Marseille", 45, "c2"),        // confirmé (noms différents dans le calendrier)
             b("Nice", "Lens", 50, "c1"),                 // absent du calendrier : rediffusion masquée
@@ -82,7 +84,9 @@ class AppFlowsTest {
     )
     private val fixtures = Fixtures(
         listOf(
-            Fixture("football", now - 10 * min, "AS Monaco", "Stade Rennais", "Ligue 1"),
+            Fixture("football", now - 10 * min, "AS Monaco", "Stade Rennais", "Ligue 1", homeScore = "1", awayScore = "0", state = "in", clock = "25'"),
+            Fixture("football", now - 140 * min, "Nantes", "Brest", "Ligue 1", homeScore = "2", awayScore = "1", state = "post", clock = "FT"),
+            Fixture("football", now - 290 * min, "Reims", "Metz", "Ligue 1", homeScore = "0", awayScore = "0", state = "post", clock = "FT"),
             Fixture("football", now + 45 * min, "Lille", "Lyon", "Ligue 1"),
             Fixture("football", now + 60 * min, "Paris Saint-Germain", "Marseille", "Ligue 1"),
             Fixture("football", now + 50 * min, "Arsenal", "Chelsea", "Premier League"),
@@ -98,6 +102,7 @@ class AppFlowsTest {
             WorkManagerTestInitHelper.initializeTestWorkManager(
                 app, Configuration.Builder().setMinimumLoggingLevel(Log.ERROR).setExecutor(SynchronousExecutor()).build(),
             )
+            Repo.liveUpdates = false // pas d'appel réseau pendant ces parcours
             GuideStore.save(app.filesDir, guide)
             fixtures.save(app.filesDir)
         }
@@ -134,6 +139,37 @@ class AppFlowsTest {
         assertTrue(compose.onAllNodes(hasText("Direct confirmé", substring = true)).fetchSemanticsNodes().size >= 3)
         // Sans favori, tous les sports du programme ont leur onglet.
         assertTrue(shown("Football")); assertTrue(shown("Tennis"))
+    }
+
+    @Test fun liveScoreAndFinishedMatchesFollowTheKeepSetting() {
+        ready()
+        // Match en cours : score et minute de jeu.
+        assertTrue(shown("Monaco – Rennes")); assertTrue(shown("1 – 0")); assertTrue(shown("EN COURS · 25'"))
+        // Terminé depuis 30 minutes : encore affiché avec son résultat (réglage par défaut : 1 heure).
+        assertTrue(shown("Nantes – Brest")); assertTrue(shown("2 – 1")); assertTrue(shown("TERMINÉ"))
+        // Terminé depuis 3 heures : déjà retiré.
+        assertFalse(shown("Reims – Metz"))
+        tab("Réglages")
+        compose.onNodeWithText("4 h").performClick()
+        waitFor("conservation 4 h") { settings().keepFinishedMin == 240 }
+        tab("À venir")
+        assertTrue(shown("Reims – Metz")); assertTrue(shown("0 – 0")); assertTrue(shown("Nantes – Brest"))
+        tab("Réglages")
+        compose.onNodeWithText("Dès la fin").performClick()
+        waitFor("retrait dès la fin") { settings().keepFinishedMin == 0 }
+        tab("À venir")
+        assertFalse(shown("Nantes – Brest")); assertFalse(shown("Reims – Metz"))
+        assertTrue("le match en cours reste", shown("Monaco – Rennes"))
+        tab("Réglages")
+        compose.onNodeWithText("Tous").performClick()
+        waitFor("tout conserver") { settings().keepFinishedMin == Settings.KEEP_ALL }
+        tab("À venir")
+        assertTrue(shown("Reims – Metz")); assertTrue(shown("Nantes – Brest"))
+        // Un match terminé ne déclenche jamais d'alerte et n'apparaît pas comme « à venir » dans le widget.
+        assertTrue(alarms().none { it.triggerAtMs < now })
+        // La fiche du match terminé rappelle le score final.
+        compose.onNodeWithText("Nantes – Brest").performClick()
+        waitFor("fiche ouverte") { shown("Score final") }
     }
 
     @Test fun everyChannelOfABroadcastIsShown() {

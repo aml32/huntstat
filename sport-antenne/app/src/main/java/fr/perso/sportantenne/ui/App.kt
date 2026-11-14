@@ -102,6 +102,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import fr.perso.sportantenne.AppState
@@ -170,6 +171,7 @@ private val SPORT_STYLES = mapOf(
 private val DEFAULT_STYLE = SportStyle("🏅", Color(0xFF5C6BC0))
 private fun styleOf(sport: String) = SPORT_STYLES[norm(sport)] ?: DEFAULT_STYLE
 
+private val LOGO_BACKGROUND = Brush.verticalGradient(listOf(Color(0xFF78909C), Color(0xFF546E7A)))
 private val CHANNEL_COLORS = listOf(0xFF1565C0, 0xFFC62828, 0xFF2E7D32, 0xFF6A1B9A, 0xFFEF6C00, 0xFF00838F, 0xFFAD1457, 0xFF4E342E).map { Color(it) }
 
 /**
@@ -230,7 +232,7 @@ private fun Tag(text: String, color: Color) {
 
 /** Badge « EN COURS » avec un point qui clignote. */
 @Composable
-private fun LiveBadge() {
+private fun LiveBadge(clock: String = "") {
     val alpha by rememberInfiniteTransition(label = "live").animateFloat(
         1f, 0.25f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "blink",
     )
@@ -240,7 +242,7 @@ private fun LiveBadge() {
     ) {
         Box(Modifier.size(6.dp).graphicsLayer { this.alpha = alpha }.clip(CircleShape).background(Color.White))
         Spacer(Modifier.width(4.dp))
-        Text("EN COURS", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(if (clock.isEmpty()) "EN COURS" else "EN COURS · $clock", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
@@ -390,7 +392,17 @@ private fun ProgrammeScreen(
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(list, key = { it.id }) { e -> EventRow(e, state, now, onOpen) }
+                    // Les événements sont regroupés sous leur heure de début.
+                    val rows = ArrayList<Any>()
+                    var last = ""
+                    for (e in list) {
+                        val h = hour(e.start).replace(':', 'h')
+                        if (h != last) { rows += h; last = h }
+                        rows += e
+                    }
+                    items(rows, key = { if (it is Event) it.id else "h$it" }) { row ->
+                        if (row is Event) EventRow(row, state, now, onOpen) else TimeHeader(row as String)
+                    }
                 }
             }
         }
@@ -413,56 +425,72 @@ private fun SportChip(label: String, emoji: String, color: Color, selected: Bool
     }
 }
 
+/** Bandeau d'heure au-dessus des événements qui commencent à ce moment-là. */
+@Composable
+private fun TimeHeader(text: String) {
+    Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
+        Text(
+            text, Modifier.shadow(3.dp, RoundedCornerShape(50)).clip(RoundedCornerShape(50)).background(HeaderBrush).padding(horizontal = 34.dp, vertical = 5.dp),
+            color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp,
+        )
+    }
+}
+
 @Composable
 private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Unit) {
-    val live = e.start <= now
     val st = styleOf(e.sport)
+    val finished = e.score?.finished == true || e.stop <= now
+    val live = !finished && e.start <= now
     Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(14.dp))
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).shadow(2.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface).clickable { onOpen(e) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(7.dp).fillMaxHeight().background(st.color))
-        Column(Modifier.width(74.dp).padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(hour(e.start), fontWeight = FontWeight.ExtraBold, fontSize = 19.sp)
-            if (live) LiveBadge() else {
-                Spacer(Modifier.height(3.dp))
-                SportBadge(e.sport, 30.dp)
-            }
-        }
-        Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp)) {
+        Box(Modifier.width(6.dp).fillMaxHeight().background(st.color))
+        Spacer(Modifier.width(8.dp))
+        SportBadge(e.sport, 32.dp)
+        Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TeamLogo(e.homeLogo)
-                Text(e.headline, Modifier.weight(1f, fill = false), fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(e.headline, Modifier.weight(1f, fill = false), fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 TeamLogo(e.awayLogo, start = true)
             }
-            Text(subtitle(e), color = st.color.forText(), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(subtitle(e), color = st.color.forText(), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             RaceTags(e, st.color)
-            Spacer(Modifier.height(6.dp))
-            // Toutes les chaînes qui diffusent l'événement, une par ligne.
+            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (live) LiveBadge(e.score?.clock ?: "") else if (finished) Tag("TERMINÉ", Color(0xFF616161))
+                // Trois états, toujours affichés : confirmé par un calendrier, non confirmé, ou rediffusion.
+                Text(
+                    when {
+                        e.verified -> "✓ Direct confirmé"
+                        e.replay -> "Rediffusion"
+                        else -> "Horaire non confirmé"
+                    },
+                    color = if (e.verified) confirmedGreen() else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp, fontWeight = if (e.verified) FontWeight.Bold else FontWeight.Normal, maxLines = 1,
+                )
+                if (state.settings.hasAlert(e) && e.start > now) Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.size(16.dp), tint = Orange)
+            }
             if (e.channels.size > 1) {
-                Text("Diffusé sur ${e.channels.size} chaînes", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(3.dp))
+                Text("Diffusé sur ${e.channels.size} chaînes", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                e.channels.forEach { ChannelBadge(state.channels[it], it, compact = e.channels.size > 1) }
-            }
-            // Trois états, toujours affichés : confirmé par un calendrier, non confirmé, ou rediffusion.
-            Text(
-                when {
-                    e.verified -> "✓ Direct confirmé"
-                    e.replay -> "Rediffusion"
-                    else -> "Horaire non confirmé par un calendrier"
-                },
-                Modifier.padding(top = 4.dp),
-                color = if (e.verified) confirmedGreen() else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp, fontWeight = if (e.verified) FontWeight.Bold else FontWeight.Normal,
-            )
         }
-        if (state.settings.hasAlert(e) && !live) {
-            Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.padding(end = 10.dp).size(22.dp), tint = Orange)
+        e.score?.let { ScoreBox(it, live) }
+        // Toutes les chaînes qui diffusent l'événement : logo et nom, l'une sous l'autre.
+        Column(Modifier.padding(start = 6.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            e.channels.forEach { ChannelBadge(state.channels[it], it, compact = e.channels.size > 1) }
         }
     }
+}
+
+/** Score du match : rouge pendant le jeu, neutre une fois terminé. */
+@Composable
+private fun ScoreBox(score: fr.perso.sportantenne.core.Score, live: Boolean) {
+    Text(
+        score.text,
+        Modifier.clip(RoundedCornerShape(8.dp)).background(if (live) LiveRed else MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 4.dp),
+        color = if (live) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, maxLines = 1,
+    )
 }
 
 /** Écusson d'une équipe ; rien n'est affiché si le calendrier n'en fournit pas ou s'il ne se charge pas. */
@@ -471,39 +499,46 @@ private fun TeamLogo(url: String, start: Boolean = false) {
     if (url.isEmpty()) return
     SubcomposeAsyncImage(
         model = url, contentDescription = null,
-        modifier = Modifier.padding(start = if (start) 6.dp else 0.dp, end = if (start) 0.dp else 6.dp).size(26.dp),
+        modifier = Modifier.padding(start = if (start) 6.dp else 0.dp, end = if (start) 0.dp else 6.dp).size(24.dp),
         success = { SubcomposeAsyncImageContent() },
     )
 }
 
-/** Logo de la chaîne et son nom ; à défaut de logo, une pastille de couleur avec ses initiales. */
+/** Logo de la chaîne, son nom en petit dessous. */
 @Composable
 private fun ChannelBadge(channel: Channel?, id: String, compact: Boolean = false) {
-    val name = channel?.name ?: id
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        ChannelLogo(channel, id, if (compact) 30 else 38)
-        Spacer(Modifier.width(6.dp))
-        Text(name, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Column(Modifier.width(78.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        ChannelLogo(channel, id, if (compact) 62 else 74, if (compact) 34 else 44)
+        Text(
+            channel?.name ?: id, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
+/**
+ * Vrai logo de la chaîne : les adresses connues sont essayées l'une après l'autre.
+ * Si aucune ne répond, le nom de la chaîne est écrit dans le cadre.
+ */
 @Composable
-private fun ChannelLogo(channel: Channel?, id: String, size: Int) {
+private fun ChannelLogo(channel: Channel?, id: String, width: Int, height: Int = width) {
     val name = channel?.name ?: id
     val shape = RoundedCornerShape(8.dp)
-    val color = CHANNEL_COLORS[(name.hashCode() and 0x7fffffff) % CHANNEL_COLORS.size]
-    // Pastille de secours : affichée sans logo, pendant le chargement, ou si l'image est indisponible.
-    val fallback: @Composable () -> Unit = {
-        Box(Modifier.fillMaxSize().background(color), contentAlignment = Alignment.Center) {
-            Text(initials(name), color = Color.White, fontSize = (size / 3).sp, fontWeight = FontWeight.Bold)
+    val urls = remember(id, channel?.logo) { fr.perso.sportantenne.core.ChannelLogos.candidates(channel, id) }
+    var attempt by remember(urls) { mutableIntStateOf(0) }
+    Box(
+        // Fond gris-bleu : il laisse lisibles aussi bien les logos blancs (Eurosport, Canal+) que les logos sombres.
+        Modifier.size(width.dp, height.dp).clip(shape).background(LOGO_BACKGROUND).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (attempt < urls.size) {
+            AsyncImage(urls[attempt], name, Modifier.fillMaxSize().padding(3.dp), onError = { attempt++ })
+        } else {
+            val color = CHANNEL_COLORS[(name.hashCode() and 0x7fffffff) % CHANNEL_COLORS.size]
+            Box(Modifier.fillMaxSize().background(color), contentAlignment = Alignment.Center) {
+                Text(name, Modifier.padding(2.dp), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 10.sp)
+            }
         }
-    }
-    Box(Modifier.size(size.dp).clip(shape).background(Color.White).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
-        if (channel?.logo.isNullOrEmpty()) fallback() else SubcomposeAsyncImage(
-            model = channel?.logo, contentDescription = name, modifier = Modifier.fillMaxSize(),
-            loading = { fallback() }, error = { fallback() },
-            success = { SubcomposeAsyncImageContent(Modifier.padding(3.dp)) },
-        )
     }
 }
 
@@ -669,7 +704,7 @@ private fun ChannelsScreen(state: AppState) {
         )
         LazyColumn(Modifier.fillMaxSize()) {
             items(shown, key = { it.id }) { c ->
-                CheckRow(c.name, "", c.id in settings.myChannels, { ChannelLogo(c, c.id, 44) }) { state.update { it.toggleChannel(c.id) } }
+                CheckRow(c.name, "", c.id in settings.myChannels, { ChannelLogo(c, c.id, 66, 42) }) { state.update { it.toggleChannel(c.id) } }
             }
         }
     }
@@ -677,6 +712,7 @@ private fun ChannelsScreen(state: AppState) {
 
 // ───────────────────────────── Réglages ─────────────────────────────
 
+private val KEEP_CHOICES = listOf(0 to "Dès la fin", 60 to "1 h", 240 to "4 h", 720 to "12 h", fr.perso.sportantenne.Settings.KEEP_ALL to "Tous")
 private val DELAYS = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h")
 
 @Composable
@@ -691,6 +727,16 @@ private fun SettingsScreen(state: AppState) {
         Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             DELAYS.forEach { (minutes, label) ->
                 FilterChip(settings.alertMinutes == minutes, { state.update { it.copy(alertMinutes = minutes) } }, { Text(label) })
+            }
+        }
+        SectionTitle("🏁  Matchs terminés")
+        Text(
+            "Combien de temps un match reste affiché après sa fin, avec son résultat quand il est connu.",
+            Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            KEEP_CHOICES.forEach { (minutes, label) ->
+                FilterChip(settings.keepFinishedMin == minutes, { state.update { it.copy(keepFinishedMin = minutes) } }, { Text(label) })
             }
         }
         SectionTitle("📺  Programme")
@@ -759,16 +805,23 @@ private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    (if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +
+                    (if (e.stop <= now) "Terminé · " else if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +
                         if (e.replay) " · Rediffusion" else if (e.verified) " · Direct confirmé" else " · Horaire non confirmé",
                     fontWeight = FontWeight.SemiBold, color = if (e.start <= now) LiveRed else MaterialTheme.colorScheme.onSurface,
                 )
                 RaceTags(e, st.color)
+                e.score?.let { sc ->
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ScoreBox(sc, !sc.finished)
+                        Text(if (sc.finished) "Score final" else "En cours" + (if (sc.clock.isNotEmpty()) " · ${sc.clock}" else ""), fontWeight = FontWeight.Bold)
+                    }
+                }
                 Spacer(Modifier.height(10.dp))
                 if (e.channels.size > 1) Text("Diffusé sur ${e.channels.size} chaînes :", fontWeight = FontWeight.Bold)
                 e.channels.forEach { id ->
                     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ChannelLogo(state.channels[id], id, 48)
+                        ChannelLogo(state.channels[id], id, 78, 48)
                         Spacer(Modifier.width(12.dp))
                         Text("Sur ${state.channels[id]?.name ?: id}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     }
