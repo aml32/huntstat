@@ -126,6 +126,9 @@ class CompetitionsTest {
         assertEquals("International / Jeux olympiques", name("Multisports", "Home of the Olympics"))
         assertEquals("Écosse / Premiership écossaise", name("Football", "Scottish Premiership"))
         assertEquals("Danemark / Superliga danoise", name("Football", "Superliga"))
+        assertEquals("Tir sportif", Sports.detect("Tir sportif")); assertEquals("Tir sportif", Sports.detect("Tir")); assertEquals("Tir à l'arc", Sports.detect("Tir à l'arc"))
+        assertEquals("International / Coupe du monde ISSF", name("Tir sportif", "Coupe du monde ISSF"))
+        assertEquals("France / Championnats de France", name("Tir sportif", "Championnats de France"))
         // Le guide ne donne parfois que le sport : une entrée dédiée, cochable.
         val generic = Competitions.idOf("Football", "Football")
         assertTrue(Competitions.isCatalogued(generic))

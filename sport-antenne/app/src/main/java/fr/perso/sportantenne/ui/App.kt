@@ -166,7 +166,8 @@ private val SPORT_STYLES = mapOf(
     "natation" to SportStyle("🏊", Color(0xFF0277BD)), "snooker" to SportStyle("🎱", Color(0xFF1B5E20)),
     "equitation" to SportStyle("🏇", Color(0xFF6D4C41)), "sports nautiques" to SportStyle("⛵", Color(0xFF01579B)),
     "padel" to SportStyle("🎾", Color(0xFF00897B)), "flechettes" to SportStyle("🎯", Color(0xFFC62828)),
-    "petanque" to SportStyle("🎯", Color(0xFF546E7A)), "e sport" to SportStyle("🎮", Color(0xFF7B1FA2)),
+    "petanque" to SportStyle("🎯", Color(0xFF546E7A)), "tir sportif" to SportStyle("🎯", Color(0xFF37474F)),
+    "tir a l arc" to SportStyle("🏹", Color(0xFF558B2F)), "e sport" to SportStyle("🎮", Color(0xFF7B1FA2)),
 )
 private val DEFAULT_STYLE = SportStyle("🏅", Color(0xFF5C6BC0))
 private fun styleOf(sport: String) = SPORT_STYLES[norm(sport)] ?: DEFAULT_STYLE
@@ -385,17 +386,25 @@ private fun ProgrammeScreen(
             val list = remember(scoped, page, days) {
                 scoped.filter { e -> if (page == 0) e.start < days[1] else e.start >= days[page] && e.start < (days.getOrNull(page + 1) ?: (days[page] + 90_000_000L)) }
             }
+            // Ce que les filtres masquent ce jour-là, pour ne jamais laisser une page vide sans explication.
+            val hidden = remember(state.events, settings, page, days, current, now) {
+                val sameDay = state.events.filter { e ->
+                    (current == null || norm(e.sport) == norm(current)) &&
+                        (if (page == 0) e.start < days[1] && e.stop > days[0] else e.start >= days[page] && e.start < (days.getOrNull(page + 1) ?: (days[page] + 90_000_000L)))
+                }
+                settings.hiddenCounts(sameDay, now)
+            }
             if (list.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
                     Text(
                         when {
                             state.loading -> "Chargement du programme…"
-                            settings.favSports.isNotEmpty() || settings.hasFavorites || settings.myChannels.isNotEmpty() ->
-                                "Aucun direct ce jour-là pour vos favoris.\nAjustez vos compétitions et vos chaînes dans les onglets Favoris et Chaînes."
-                            else -> "Aucun direct ce jour-là."
+                            hidden.isEmpty() -> "Aucune diffusion sportive ce jour-là" + (if (current != null) " en $current." else ".")
+                            else -> "Rien à afficher ce jour-là" + (if (current != null) " en $current" else "") + " avec vos réglages."
                         },
-                        fontSize = 16.sp,
+                        fontSize = 17.sp, fontWeight = FontWeight.Bold,
                     )
+                    HiddenSummary(hidden)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -410,10 +419,20 @@ private fun ProgrammeScreen(
                     items(rows, key = { if (it is Event) it.id else "h$it" }) { row ->
                         if (row is Event) EventRow(row, state, now, onOpen) else TimeHeader(row as String)
                     }
+                    if (hidden.isNotEmpty()) item(key = "masquees") { Column(Modifier.padding(8.dp)) { HiddenSummary(hidden) } }
                 }
             }
         }
     }
+}
+
+/** Détail des diffusions masquées par les filtres, raison par raison. */
+@Composable
+private fun HiddenSummary(hidden: Map<String, Int>) {
+    if (hidden.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Text("${hidden.values.sum()} diffusion(s) masquée(s) ce jour-là :", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    hidden.forEach { (reason, n) -> Text("• $n $reason", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 }
 
 @Composable
@@ -478,6 +497,9 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
                     fontSize = 11.sp, fontWeight = if (e.verified) FontWeight.Bold else FontWeight.Normal, maxLines = 1,
                 )
                 if (state.settings.hasAlert(e) && e.start > now) Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.size(16.dp), tint = Orange)
+            }
+            if (e.kickoff > 0 && e.score == null) {
+                Text("Coup d'envoi ${hour(e.kickoff).replace(':', 'h')}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             if (e.channels.size > 1) {
                 Text("Diffusé sur ${e.channels.size} chaînes", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -856,8 +878,12 @@ private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit
                         Text("Sur ${state.channels[id]?.name ?: id}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text("En bref", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                summary(e, state.channels, now).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 if (e.desc.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
+                    Text("Présentation de la chaîne", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                     Text(e.desc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.height(12.dp))
@@ -909,6 +935,43 @@ private fun subtitle(e: Event): String = buildList {
     } else add(e.sport)
     if (e.detail.isNotBlank()) add(e.detail)
 }.joinToString(" · ")
+
+/** Résumé en quelques lignes : quoi, qui, quand, sur quelle chaîne, et ce qui est vérifié. */
+internal fun summary(e: Event, channels: Map<String, Channel>, now: Long): List<String> {
+    val lines = ArrayList<String>()
+    fun h(t: Long) = hour(t).replace(':', 'h')
+    val known = Competitions.byId(Competitions.idOf(e.sport, e.competition))
+    val place = known?.country?.substringAfter(' ')?.takeIf { known.country != Competitions.OTHER }
+    val competition = e.competition.takeIf { it.isNotBlank() && norm(it) != norm(e.sport) }
+    lines += buildString {
+        append(e.sport)
+        if (competition != null) append(" — ").append(competition)
+        if (place != null) append(" ($place)")
+        if (e.detail.isNotBlank() && e.race.isEmpty) append(", ").append(e.detail)
+        append('.')
+    }
+    if (e.hasTeams) lines += "${e.home} affronte ${e.away}."
+    if (!e.race.isEmpty) {
+        val r = e.race
+        lines += listOf(r.format, r.distance, r.gender.lowercase().takeIf { it.isNotEmpty() }?.let { "($it)" } ?: "", r.place.takeIf { it.isNotEmpty() }?.let { "à $it" } ?: "")
+            .filter { it.isNotEmpty() }.joinToString(" ").replaceFirstChar { it.uppercase() } + "."
+    }
+    lines += buildString {
+        append(dayLabel(e.start, now)).append(" : prise d'antenne à ").append(h(e.start))
+        if (e.kickoff > 0) append(", coup d'envoi à ").append(h(e.kickoff))
+        append(", fin prévue vers ").append(h(e.stop)).append('.')
+    }
+    e.score?.let { lines += (if (it.finished) "Score final : " else "Score en cours : ") + "${e.home} ${it.home} – ${it.away} ${e.away}" + (if (!it.finished && it.clock.isNotEmpty()) " (${it.clock})." else ".") }
+    lines += when {
+        e.replay -> "Rediffusion : ce n'est pas un direct."
+        e.verified && e.precise -> "Direct confirmé : l'horaire correspond au calendrier officiel de la compétition."
+        e.verified -> "Tournoi en cours confirmé : il se joue bien ce jour-là, l'heure exacte des matchs n'est pas vérifiée."
+        else -> "Horaire non confirmé : aucun calendrier indépendant ne couvre cette épreuve, seule la chaîne l'annonce."
+    }
+    val names = e.channels.map { channels[it]?.name ?: it }
+    lines += if (names.size == 1) "Diffusé sur ${names[0]}." else "Diffusé sur ${names.size} chaînes : ${names.joinToString(", ")}."
+    return lines
+}
 
 private fun hour(t: Long): String = SimpleDateFormat("HH:mm", Locale.FRENCH).format(Date(t))
 

@@ -54,6 +54,8 @@ data class Event(
     val race: RaceInfo = RaceInfo(),
     /** Score en direct ou final, quand le calendrier le fournit. */
     val score: Score? = null,
+    /** Heure réelle du coup d'envoi donnée par le calendrier (0 si inconnue). */
+    val kickoff: Long = 0L,
 ) {
     val hasTeams get() = home.isNotBlank() && away.isNotBlank()
     val headline get() = if (hasTeams) "$home – $away" else title
@@ -178,7 +180,7 @@ object Schedule {
                     verified = verdict == Verdict.LIVE || (verdict == Verdict.ONGOING && !guessReplay(b, idx != null && b.detail.isNotBlank())),
                     precise = verdict != Verdict.ONGOING,
                     homeLogo = resolution?.homeLogo ?: "", awayLogo = resolution?.awayLogo ?: "",
-                    race = Races.parse(b), score = resolution?.score,
+                    race = Races.parse(b), score = resolution?.score, kickoff = resolution?.kickoff ?: 0L,
                 )
             }
         }

@@ -343,14 +343,31 @@ data class Settings(
         return chosen.isNullOrEmpty() || Competitions.idOf(e.sport, e.competition) in chosen
     }
 
+    /**
+     * Raison pour laquelle une diffusion n'est pas affichée, ou null si elle l'est.
+     * L'ordre est celui des filtres : durée de conservation, magazines, rediffusions,
+     * directs confirmés, chaînes, sports, compétitions.
+     */
+    fun hiddenReason(e: Event, now: Long): String? = when {
+        keepFinishedMin != KEEP_ALL && e.stop <= now - keepFinishedMin * 60_000L -> HIDDEN_FINISHED
+        !showMagazines && e.kind != Kind.EVENT -> HIDDEN_MAGAZINE
+        hideReplays && e.replay -> HIDDEN_REPLAY
+        verifiedOnly && !e.verified -> HIDDEN_UNVERIFIED
+        myChannels.isNotEmpty() && e.channels.none { it in myChannels } -> HIDDEN_CHANNEL
+        favSports.isNotEmpty() && !isFavSport(e.sport) -> HIDDEN_SPORT
+        !matchesFavorites(e) -> HIDDEN_COMPETITION
+        else -> null
+    }
+
     /** Filtre commun : à venir ou en cours, directs, puis favoris (sports, compétitions, chaînes). */
-    fun visible(events: List<Event>, now: Long): List<Event> = events.filter { e ->
-        (keepFinishedMin == KEEP_ALL || e.stop > now - keepFinishedMin * 60_000L) &&
-            (showMagazines || e.kind == Kind.EVENT) &&
-            (!hideReplays || !e.replay) &&
-            (!verifiedOnly || e.verified) &&
-            (myChannels.isEmpty() || e.channels.any { it in myChannels }) &&
-            matchesFavorites(e)
+    fun visible(events: List<Event>, now: Long): List<Event> = events.filter { hiddenReason(it, now) == null }
+
+    /** Décompte des diffusions masquées, par raison, dans l'ordre des filtres. */
+    fun hiddenCounts(events: List<Event>, now: Long): Map<String, Int> {
+        val out = LinkedHashMap<String, Int>()
+        for (reason in HIDDEN_ORDER) out[reason] = 0
+        for (e in events) hiddenReason(e, now)?.let { out[it] = (out[it] ?: 0) + 1 }
+        return out.filterValues { it > 0 }
     }
 
     fun save(ctx: Context) {
@@ -372,6 +389,14 @@ data class Settings(
     companion object {
         private const val PREFS = "settings"
         const val KEEP_ALL = -1
+        const val HIDDEN_FINISHED = "terminées depuis plus longtemps que votre réglage « Matchs terminés »"
+        const val HIDDEN_MAGAZINE = "magazines et émissions (réglage « Afficher les magazines »)"
+        const val HIDDEN_REPLAY = "rediffusions (réglage « Masquer les rediffusions »)"
+        const val HIDDEN_UNVERIFIED = "non confirmées (réglage « Directs confirmés uniquement »)"
+        const val HIDDEN_CHANNEL = "sur des chaînes que vous n'avez pas cochées"
+        const val HIDDEN_SPORT = "dans des sports que vous n'avez pas cochés"
+        const val HIDDEN_COMPETITION = "dans des compétitions que vous n'avez pas cochées"
+        val HIDDEN_ORDER = listOf(HIDDEN_CHANNEL, HIDDEN_COMPETITION, HIDDEN_UNVERIFIED, HIDDEN_SPORT, HIDDEN_REPLAY, HIDDEN_MAGAZINE, HIDDEN_FINISHED)
 
         fun load(ctx: Context): Settings {
             val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

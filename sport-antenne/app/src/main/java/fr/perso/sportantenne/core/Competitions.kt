@@ -248,7 +248,11 @@ object Competitions {
         add("Bobsleigh, luge et skeleton", WORLD, "Coupe du monde" to "coupe du monde", "Championnats du monde" to "championnats? du monde", "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Autres épreuves" to ".*")
         add("Hockey sur gazon", WORLD, "Pro League et championnats" to ".*")
         add("Cricket", WORLD, "Coupe du monde et tests" to ".*")
-        add("Tir et tir à l'arc", WORLD, "Coupe du monde et championnats" to ".*")
+        add("Tir sportif", WORLD, "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Coupe du monde ISSF" to "coupe du monde|issf|world cup",
+            "Championnats du monde" to "championnats? du monde|mondiaux", "Championnats d'Europe" to "championnats? d europe")
+        add("Tir sportif", FR, "Championnats de France" to "championnats? de france", "Autres compétitions de tir" to ".*")
+        add("Tir à l'arc", WORLD, "Jeux olympiques" to "jeux olympiques|olympi\\w*", "Coupe du monde" to "coupe du monde|world cup",
+            "Championnats du monde et d'Europe" to "championnats?", "Autres compétitions" to ".*")
         add("Pelote basque", FR, "Championnats et masters" to ".*")
         add("Pentathlon moderne", WORLD, "Coupe du monde et championnats" to ".*")
         add("Échecs", WORLD, "Championnats et tournois" to ".*")

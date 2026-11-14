@@ -107,6 +107,26 @@ class SettingsTest {
         assertTrue(list.none { it.start > now })
     }
 
+    @Test fun hiddenBroadcastsAreCountedByReason() {
+        val h = 3_600_000L
+        val all = list + listOf(
+            event(home = "Vieux", start = now - 6 * h), event(home = "Redif", replay = true), event(home = "Mag", kind = Kind.MAGAZINE),
+            event(home = "Ailleurs", channels = listOf("c9")),
+        )
+        assertEquals(
+            mapOf(Settings.HIDDEN_REPLAY to 1, Settings.HIDDEN_MAGAZINE to 1, Settings.HIDDEN_FINISHED to 1),
+            Settings().hiddenCounts(all, now),
+        )
+        val s = Settings(verifiedOnly = true).toggleChannel("c1").toggleSport("Football").toggleCompetition("Football", ligue1)
+        val counts = s.hiddenCounts(all, now)
+        // Chaque diffusion n'est comptée qu'une fois, sous le premier filtre qui l'écarte.
+        assertEquals(all.size - s.visible(all, now).size, counts.values.sum())
+        assertTrue(counts.containsKey(Settings.HIDDEN_UNVERIFIED))
+        // Sans le mode strict, la chaîne non cochée apparaît comme raison.
+        assertEquals(1, Settings().toggleChannel("c1").hiddenCounts(all, now)[Settings.HIDDEN_CHANNEL])
+        assertTrue(Settings(keepFinishedMin = Settings.KEEP_ALL, hideReplays = false, showMagazines = true).hiddenCounts(all, now).isEmpty())
+    }
+
     @Test fun replaysMagazinesAndVerifiedOnlyFollowTheSwitches() {
         val mixed = listOf(event(verified = true), event(home = "Nice", replay = true), event(home = "Mag", kind = Kind.MAGAZINE), event(home = "Brest"))
         assertEquals(listOf("Lille", "Brest"), Settings().visible(mixed, now).map { it.home })

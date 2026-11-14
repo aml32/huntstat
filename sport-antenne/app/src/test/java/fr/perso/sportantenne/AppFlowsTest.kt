@@ -181,6 +181,58 @@ class AppFlowsTest {
         assertFalse(shown("Calendriers sportifs indisponibles"))
     }
 
+    @Test fun anEmptyPageSaysWhatTheFiltersHide() {
+        ready()
+        // Cas vécu : « Directs confirmés uniquement » activé, puis l'onglet d'un sport sans calendrier.
+        tab("Réglages")
+        compose.onNodeWithText("Directs confirmés uniquement").performClick()
+        waitFor("mode strict") { settings().verifiedOnly }
+        tab("À venir")
+        assertTrue(shown("Lille – Lyon")); assertFalse(shown("Alcaraz – Sinner"))
+        assertTrue("les rediffusions et non confirmés masqués sont comptés sous la liste", shown("diffusion(s) masquée(s) ce jour-là"))
+        assertTrue(shown("non confirmées (réglage « Directs confirmés uniquement »)")); assertTrue(shown("rediffusions (réglage « Masquer les rediffusions »)"))
+        // Une chaîne cochée qui ne diffuse aucun football confirmé : la page vide dit pourquoi.
+        tab("Chaînes")
+        compose.onNodeWithText("beIN Test").performClick()
+        waitFor("chaîne cochée") { settings().myChannels == setOf("c2") }
+        tab("Favoris"); openSport("Football")
+        compose.onNode(hasText("Rechercher une compétition ou un pays")).performTextInput("belg")
+        compose.waitForIdle()
+        compose.onNodeWithText("Pro League").performClick()
+        waitFor("compétition cochée") { settings().competitionCount("Football") == 1 }
+        tab("À venir")
+        compose.onNodeWithText("Football").performClick()
+        waitFor("page vide expliquée") { shown("Rien à afficher ce jour-là en Football avec vos réglages.") }
+        assertTrue(shown("sur des chaînes que vous n'avez pas cochées")); assertTrue(shown("dans des compétitions que vous n'avez pas cochées"))
+    }
+
+    @Test fun eventSheetExplainsTheEventInAFewLines() {
+        ready()
+        val lille = events().first { it.home == "Lille" && !it.replay }
+        val lines = fr.perso.sportantenne.ui.summary(lille, guide.channels.associateBy { it.id }, now)
+        assertEquals("Football — Ligue 1 (France).", lines[0])
+        assertEquals("Lille affronte Lyon.", lines[1])
+        assertTrue(lines[2], lines[2].startsWith("Aujourd'hui : prise d'antenne à ") && lines[2].contains(", coup d'envoi à ") && lines[2].contains(", fin prévue vers "))
+        assertEquals("Direct confirmé : l'horaire correspond au calendrier officiel de la compétition.", lines[3])
+        assertEquals("Diffusé sur 2 chaînes : Canal Test, beIN Test.", lines[4])
+        assertEquals("le coup d'envoi réel vient du calendrier, pas du guide", now / min * 0 + lille.kickoff, fixtures.list.first { it.home == "Lille" }.start)
+
+        val nantes = events().first { it.home == "Nantes" }
+        assertTrue(fr.perso.sportantenne.ui.summary(nantes, guide.channels.associateBy { it.id }, now).contains("Score final : Nantes 2 – 1 Brest."))
+        val race = events().first { it.sport == "Biathlon" }
+        val bia = fr.perso.sportantenne.ui.summary(race, guide.channels.associateBy { it.id }, now)
+        assertEquals("Biathlon — Coupe du monde (International).", bia[0])
+        assertEquals("Sprint 7,5 km (femmes).", bia[1])
+        assertTrue(bia.any { it.startsWith("Horaire non confirmé") })
+        val replay = events().first { it.home == "Nice" }
+        assertTrue(fr.perso.sportantenne.ui.summary(replay, guide.channels.associateBy { it.id }, now).contains("Rediffusion : ce n'est pas un direct."))
+
+        // À l'écran, la fiche reprend ces lignes.
+        compose.onNodeWithText("Lille – Lyon").performClick()
+        waitFor("fiche ouverte") { shown("En bref") }
+        assertTrue(shown("Lille affronte Lyon.")); assertTrue(shown("coup d'envoi à")); assertTrue(shown("Présentation de la chaîne"))
+    }
+
     @Test fun everyChannelOfABroadcastIsShown() {
         ready()
         val lille = events().first { it.home == "Lille" && !it.replay }
@@ -298,7 +350,7 @@ class AppFlowsTest {
         assertTrue(shown("Aujourd'hui")); assertTrue(shown("Demain"))
         compose.onNodeWithText("Demain").performClick()
         compose.waitForIdle()
-        waitFor("page de demain") { shown("Aucun direct ce jour-là") }
+        waitFor("page de demain") { shown("Aucune diffusion sportive ce jour-là") }
         compose.onNodeWithText("Aujourd'hui").performClick()
         waitFor("retour à aujourd'hui") { shown("Lille – Lyon") }
     }

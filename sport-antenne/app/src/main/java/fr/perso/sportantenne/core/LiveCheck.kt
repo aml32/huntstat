@@ -24,7 +24,7 @@ class LiveCheck(private val fixtures: Fixtures) {
     private val bestCache = HashMap<String, Int>()
 
     /** Verdict et, pour un direct confirmé, les logos des deux équipes dans l'ordre du guide. */
-    class Resolution(val verdict: Verdict, val homeLogo: String = "", val awayLogo: String = "", val score: Score? = null)
+    class Resolution(val verdict: Verdict, val homeLogo: String = "", val awayLogo: String = "", val score: Score? = null, val kickoff: Long = 0L)
 
     fun verdict(b: Broadcast): Verdict = resolve(b).verdict
 
@@ -60,8 +60,8 @@ class LiveCheck(private val fixtures: Fixtures) {
             if (inWindow(b, e.f.start)) {
                 val f = e.f
                 val known = f.state == "in" || f.state == "post"
-                return if (straight) Resolution(Verdict.LIVE, f.homeLogo, f.awayLogo, if (known) Score(f.homeScore, f.awayScore, f.state, f.clock) else null)
-                else Resolution(Verdict.LIVE, f.awayLogo, f.homeLogo, if (known) Score(f.awayScore, f.homeScore, f.state, f.clock) else null)
+                return if (straight) Resolution(Verdict.LIVE, f.homeLogo, f.awayLogo, if (known) Score(f.homeScore, f.awayScore, f.state, f.clock) else null, f.start)
+                else Resolution(Verdict.LIVE, f.awayLogo, f.homeLogo, if (known) Score(f.awayScore, f.homeScore, f.state, f.clock) else null, f.start)
             }
             if (strongH && strongA) pairElsewhere = true
         }

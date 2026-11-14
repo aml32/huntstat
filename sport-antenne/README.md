@@ -53,7 +53,7 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-84 tests automatiques (`./gradlew testDebugUnitTest`) :
+87 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;
