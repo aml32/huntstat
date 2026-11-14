@@ -51,6 +51,12 @@ heure-là est une **rediffusion** (masquée). Pour les sports sans calendrier (t
 des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.kt`) ; le réglage
 « Directs confirmés uniquement » les masque.
 
+## Diagnostic
+
+Réglages > « Envoyer le diagnostic » produit un rapport texte (version, calendriers chargés ou en échec
+avec la raison, nombre de directs confirmés, non confirmés et rediffusions, réglages actifs), partagé
+et copié dans le presse-papiers. Les réglages affichent aussi l'état de chaque calendrier.
+
 ## Tests
 
 87 tests automatiques (`./gradlew testDebugUnitTest`) :

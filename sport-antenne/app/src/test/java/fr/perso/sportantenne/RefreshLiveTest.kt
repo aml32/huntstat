@@ -35,6 +35,10 @@ class RefreshLiveTest {
         val firstMs = System.currentTimeMillis() - t0
         val live = first.events.filter { it.kind == Kind.EVENT && !it.replay }
         println("REFRESH 1: ${firstMs} ms, ${first.events.size} diffusions, ${live.size} directs, ${live.count { it.verified }} confirmés, ${first.channels.size} chaînes")
+        val report = Repo.diagnostic(app, first.events, Settings.load(app))
+        println("DIAGNOSTIC\n$report")
+        assertTrue(report, report.contains("football : ") && !report.contains("football : 0 entrées"))
+        assertTrue("aucun calendrier en échec : ${Repo.failures}", Repo.failures.isEmpty())
         assertTrue(first.events.size > 500)
         assertTrue(first.channels.size > 100)
         assertTrue("des directs confirmés par le calendrier", live.count { it.verified } > 5)

@@ -295,6 +295,13 @@ fun SportAntenneApp(state: AppState) {
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                if (state.events.isNotEmpty() && state.calendars.isNotEmpty() && (state.calendars["football"] ?: 0) == 0 && !state.loading) {
+                    Text(
+                        "Calendrier du football non chargé : les matchs de football ne peuvent pas être confirmés. Touchez ↻, puis voyez Réglages > Envoyer le diagnostic.",
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error).padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onError, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
                 if (state.events.isNotEmpty() && state.calendars.isEmpty() && !state.loading) {
                     Text(
                         "Calendriers sportifs indisponibles : aucun direct ne peut être confirmé pour l'instant. Touchez ↻ pour réessayer.",
@@ -790,14 +797,31 @@ private fun SettingsScreen(state: AppState) {
         Text("Calendriers de vérification", Modifier.padding(start = 16.dp, top = 12.dp), fontWeight = FontWeight.Bold)
         CALENDAR_LABELS.forEach { (key, label) ->
             val n = state.calendars[key] ?: 0
+            val failure = fr.perso.sportantenne.Repo.failures[key]
             Text(
-                if (n > 0) "✓ $label : $n" else "✗ $label : non chargé",
+                if (failure != null) "✗ $label : échec ($failure)" else if (n > 0) "✓ $label : $n" else "✗ $label : non chargé",
                 Modifier.padding(horizontal = 16.dp), fontSize = 14.sp,
-                color = if (n > 0) confirmedGreen() else MaterialTheme.colorScheme.error,
+                color = if (n > 0 && failure == null) confirmedGreen() else MaterialTheme.colorScheme.error,
             )
         }
         Text(
             "Sans calendrier (rugby international, handball, volley, cyclisme, biathlon, ski…), une diffusion porte la mention « Horaire non confirmé ».",
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Rapport complet à envoyer en cas de problème.
+        val ctx = LocalContext.current
+        Button(
+            onClick = {
+                val report = fr.perso.sportantenne.Repo.diagnostic(ctx, state.events, settings)
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, report)
+                runCatching { ctx.startActivity(android.content.Intent.createChooser(send, "Envoyer le diagnostic")) }
+                (ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                    ?.setPrimaryClip(android.content.ClipData.newPlainText("Diagnostic Sport Antenne", report))
+            },
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+        ) { Text("Envoyer le diagnostic") }
+        Text(
+            "Version ${fr.perso.sportantenne.BuildConfig.VERSION_NAME}. Le diagnostic est aussi copié dans le presse-papiers : il suffit de le coller.",
             Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedButton(onClick = state::refresh, enabled = !state.loading, modifier = Modifier.padding(16.dp)) {

@@ -105,7 +105,7 @@ object Repo {
     private const val STATE = "refresh"
     private const val DAY = 86_400_000L
     private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports"
-    private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "272073", "289234", "270560", "242041", "244293", "267979", "270563", "164205", "289237")
+    private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "272073", "289234", "242041", "244293", "267979", "270563", "164205", "289237")
 
     private fun get(url: String): String {
         var last: Exception? = null
@@ -114,9 +114,13 @@ object Repo {
             conn.connectTimeout = 15_000
             conn.readTimeout = 30_000
             conn.setRequestProperty("User-Agent", "SportAntenne/1.2 (Android)")
+            conn.setRequestProperty("Accept", "application/json")
             try {
-                if (conn.responseCode == 200) return conn.inputStream.bufferedReader().use { it.readText() }
-                last = IllegalStateException("HTTP ${conn.responseCode}")
+                val code = conn.responseCode
+                if (code == 200) return conn.inputStream.bufferedReader().use { it.readText() }
+                last = IllegalStateException("réponse HTTP $code")
+                // Trop de requêtes : on laisse souffler le serveur avant le second essai.
+                if (code == 429 || code == 503) Thread.sleep(1500)
             } catch (e: Exception) {
                 last = e
             } finally {
@@ -138,27 +142,27 @@ object Repo {
         val months = days.map { fmt("yyyyMM").format(it) }.distinct()
 
         val jobs = ArrayList<Job>()
-        days.forEach { d -> jobs += Job("football", listOf(Fixtures.dayOf(d)), "$ESPN/soccer/all/scoreboard?dates=${fmt("yyyyMMdd").format(d)}&limit=900") }
+        days.forEach { d -> jobs += Job("football", listOf(Fixtures.dayOf(d)), "$ESPN/soccer/all/scoreboard?dates=${fmt("yyyyMMdd").format(d)}&limit=900&lang=en&region=us") }
         for (m in months) {
             val inMonth = dayKeys.filter { it.replace("-", "").startsWith(m) }
-            jobs += Job("nba", inMonth, "$ESPN/basketball/nba/scoreboard?dates=$m&limit=1000")
-            jobs += Job("nfl", inMonth, "$ESPN/football/nfl/scoreboard?dates=$m&limit=1000")
-            jobs += Job("nhl", inMonth, "$ESPN/hockey/nhl/scoreboard?dates=$m&limit=1000")
-            RUGBY_LEAGUES.forEach { jobs += Job("rugby", inMonth, "$ESPN/rugby/$it/scoreboard?dates=$m&limit=1000") }
+            jobs += Job("nba", inMonth, "$ESPN/basketball/nba/scoreboard?dates=$m&limit=1000&lang=en&region=us")
+            jobs += Job("nfl", inMonth, "$ESPN/football/nfl/scoreboard?dates=$m&limit=1000&lang=en&region=us")
+            jobs += Job("nhl", inMonth, "$ESPN/hockey/nhl/scoreboard?dates=$m&limit=1000&lang=en&region=us")
+            RUGBY_LEAGUES.forEach { jobs += Job("rugby", inMonth, "$ESPN/rugby/$it/scoreboard?dates=$m&limit=1000&lang=en&region=us") }
         }
         jobs += Job("f1", dayKeys, "https://api.jolpi.ca/ergast/f1/current.json", f1 = true)
-        for (m in months) jobs += Job("ufc", dayKeys.filter { it.replace("-", "").startsWith(m) }, "$ESPN/mma/ufc/scoreboard?dates=$m&limit=100", kind = "ufc")
+        for (m in months) jobs += Job("ufc", dayKeys.filter { it.replace("-", "").startsWith(m) }, "$ESPN/mma/ufc/scoreboard?dates=$m&limit=100&lang=en&region=us", kind = "ufc")
         // Tournois de tennis et de golf : un relevé tous les trois jours suffit, ils durent une semaine.
         for (d in listOf(days[0], days[1], days[4], days[7])) {
             val date = fmt("yyyyMMdd").format(d)
-            for (tour in listOf("atp", "wta")) jobs += Job("tennis", dayKeys, "$ESPN/tennis/$tour/scoreboard?dates=$date", kind = tour)
-            for (tour in listOf("pga", "eur", "lpga")) jobs += Job("golf", dayKeys, "$ESPN/golf/$tour/scoreboard?dates=$date", kind = tour)
+            for (tour in listOf("atp", "wta")) jobs += Job("tennis", dayKeys, "$ESPN/tennis/$tour/scoreboard?dates=$date&lang=en&region=us", kind = tour)
+            for (tour in listOf("pga", "eur", "lpga")) jobs += Job("golf", dayKeys, "$ESPN/golf/$tour/scoreboard?dates=$date&lang=en&region=us", kind = tour)
         }
         // Sport universitaire américain : confirmation des directs uniquement.
         for (d in days) {
             val date = fmt("yyyyMMdd").format(d)
-            jobs += Job("ncaab", listOf(Fixtures.dayOf(d)), "$ESPN/basketball/mens-college-basketball/scoreboard?dates=$date&groups=50&limit=400")
-            jobs += Job("ncaaf", listOf(Fixtures.dayOf(d)), "$ESPN/football/college-football/scoreboard?dates=$date&groups=80&limit=400")
+            jobs += Job("ncaab", listOf(Fixtures.dayOf(d)), "$ESPN/basketball/mens-college-basketball/scoreboard?dates=$date&groups=50&limit=400&lang=en&region=us")
+            jobs += Job("ncaaf", listOf(Fixtures.dayOf(d)), "$ESPN/football/college-football/scoreboard?dates=$date&groups=80&limit=400&lang=en&region=us")
         }
 
         return run(jobs)
@@ -171,17 +175,22 @@ object Repo {
         for (d in listOf(now - DAY, now)) {
             val key = listOf(Fixtures.dayOf(d))
             val date = day.format(d)
-            if ("football" in sources) jobs += Job("football", key, "$ESPN/soccer/all/scoreboard?dates=$date&limit=900")
-            if ("nba" in sources) jobs += Job("nba", key, "$ESPN/basketball/nba/scoreboard?dates=$date&limit=200")
-            if ("nfl" in sources) jobs += Job("nfl", key, "$ESPN/football/nfl/scoreboard?dates=$date&limit=200")
-            if ("nhl" in sources) jobs += Job("nhl", key, "$ESPN/hockey/nhl/scoreboard?dates=$date&limit=200")
-            if ("rugby" in sources) RUGBY_LEAGUES.forEach { jobs += Job("rugby", key, "$ESPN/rugby/$it/scoreboard?dates=$date&limit=200") }
+            if ("football" in sources) jobs += Job("football", key, "$ESPN/soccer/all/scoreboard?dates=$date&limit=900&lang=en&region=us")
+            if ("nba" in sources) jobs += Job("nba", key, "$ESPN/basketball/nba/scoreboard?dates=$date&limit=200&lang=en&region=us")
+            if ("nfl" in sources) jobs += Job("nfl", key, "$ESPN/football/nfl/scoreboard?dates=$date&limit=200&lang=en&region=us")
+            if ("nhl" in sources) jobs += Job("nhl", key, "$ESPN/hockey/nhl/scoreboard?dates=$date&limit=200&lang=en&region=us")
+            if ("rugby" in sources) RUGBY_LEAGUES.forEach { jobs += Job("rugby", key, "$ESPN/rugby/$it/scoreboard?dates=$date&limit=200&lang=en&region=us") }
         }
         return run(jobs)
     }
 
+    /** Dernier échec de lecture par calendrier (vide quand tout va bien). */
+    val failures = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     private fun run(jobs: List<Job>): Fixtures {
-        val pool = Executors.newFixedThreadPool(4)
+        jobs.map { it.source }.distinct().forEach { failures.remove(it) }
+        // Trois lectures à la fois : assez rapide, sans rafale qui ferait refuser les requêtes.
+        val pool = Executors.newFixedThreadPool(3)
         try {
             val results = pool.invokeAll(jobs.map { job ->
                 Callable<Pair<Job, List<Fixture>>?> {
@@ -194,14 +203,18 @@ object Repo {
                             else -> FixtureParsers.espn(body, job.source)
                         }
                     } catch (e: Exception) {
+                        // Gardé pour le diagnostic : quel calendrier a échoué, et pourquoi.
+                        failures[job.source] = (e.message ?: e.javaClass.simpleName).take(80)
                         null
                     }
                 }
-            }, 90, TimeUnit.SECONDS)
+            }, 120, TimeUnit.SECONDS)
             val list = ArrayList<Fixture>()
             val covered = HashMap<String, MutableSet<String>>()
             for (r in results) {
-                val (job, fixtures) = (try { if (r.isCancelled) null else r.get() } catch (e: Exception) { null }) ?: continue
+                val done = try { if (r.isCancelled) null else r.get() } catch (e: Exception) { null }
+                if (done == null) continue
+                val (job, fixtures) = done
                 list += fixtures
                 covered.getOrPut(job.source) { HashSet() } += job.covered
             }
@@ -214,6 +227,39 @@ object Repo {
     /** Programme recoupé avec les calendriers en cache : à utiliser partout (écran, widget, alertes). */
     fun buildEvents(ctx: Context, guide: Guide): List<Event> =
         Schedule.build(guide.broadcasts, LiveCheck(Fixtures.load(ctx.filesDir)))
+
+    /**
+     * Rapport lisible de l'état de l'appli sur ce téléphone : version, calendriers chargés ou en échec,
+     * et ce que la vérification a conclu. Fait pour être copié et envoyé tel quel.
+     */
+    fun diagnostic(ctx: Context, events: List<Event>, settings: Settings): String {
+        val now = System.currentTimeMillis()
+        val fmt = SimpleDateFormat("dd/MM HH:mm", Locale.FRENCH)
+        val fixtures = Fixtures.load(ctx.filesDir)
+        val counts = fixtures.list.groupingBy { it.source }.eachCount()
+        val today = Fixtures.dayOf(now)
+        val upcoming = events.filter { it.kind == Kind.EVENT && it.stop > now && it.start < now + DAY }
+        val sb = StringBuilder()
+        sb.appendLine("Sport Antenne ${BuildConfig.VERSION_NAME} — ${fmt.format(now)} — Android ${android.os.Build.VERSION.RELEASE} (${android.os.Build.MODEL})")
+        sb.appendLine("Guide : ${events.size} diffusions, vérifié le ${if (lastCheck(ctx) > 0) fmt.format(lastCheck(ctx)) else "jamais"}")
+        sb.appendLine("Calendriers :")
+        for (source in listOf("football", "rugby", "nba", "nfl", "nhl", "ncaab", "ncaaf", "f1", "tennis", "golf", "ufc")) {
+            val covered = fixtures.coveredDays[source]
+            sb.appendLine("  $source : ${counts[source] ?: 0} entrées, ${covered?.size ?: 0} jours couverts, aujourd'hui ${if (covered?.contains(today) == true) "oui" else "NON"}" +
+                (failures[source]?.let { " — ÉCHEC : $it" } ?: ""))
+        }
+        sb.appendLine("Prochaines 24 h : ${upcoming.size} diffusions — ${upcoming.count { it.verified && it.precise }} directs confirmés, " +
+            "${upcoming.count { it.verified && !it.precise }} tournois confirmés, ${upcoming.count { !it.verified && !it.replay }} non confirmés, ${upcoming.count { it.replay }} rediffusions")
+        sb.appendLine("Par sport (confirmés/non confirmés/rediffusions) : " + upcoming.groupBy { it.sport }.entries.sortedByDescending { it.value.size }.take(12)
+            .joinToString { "${it.key} ${it.value.count { e -> e.verified }}/${it.value.count { e -> !e.verified && !e.replay }}/${it.value.count { e -> e.replay }}" })
+        sb.appendLine("Football, 6 premiers : " + upcoming.filter { it.sport == "Football" && it.hasTeams }.take(6).joinToString(" ; ") {
+            "${it.headline} [${it.competition}] " + (if (it.verified) "confirmé" else if (it.replay) "rediffusion" else "non confirmé")
+        })
+        sb.appendLine("Réglages : sports=${settings.favSports.size} compétitions=${settings.favCompetitions.size} chaînes=${settings.myChannels.size} " +
+            "confirmésSeulement=${settings.verifiedOnly} masquerRediffs=${settings.hideReplays} garder=${settings.keepFinishedMin}")
+        sb.appendLine("Affichées dans les 24 h : ${settings.visible(upcoming, now).size} ; masquées : ${settings.hiddenCounts(upcoming, now)}")
+        return sb.toString()
+    }
 
     fun calendarCounts(ctx: Context): Map<String, Int> = Fixtures.load(ctx.filesDir).list.groupingBy { it.source }.eachCount()
 
