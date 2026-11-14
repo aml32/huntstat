@@ -118,6 +118,10 @@ class AppState(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 show(Repo.refresh(getApplication()))
+                // Deuxième source, lente : lue ensuite en arrière-plan, au plus toutes les six heures.
+                if (Repo.liveUpdates && Repo.extraIsStale(getApplication())) {
+                    viewModelScope.launch { runCatching { Repo.refreshExtra(getApplication())?.let { show(it) } } }
+                }
             } catch (e: Exception) {
                 error = if (events.isEmpty()) "Programme indisponible : vérifiez la connexion puis réessayez."
                 else "Mise à jour impossible pour l'instant (${e.message ?: "réseau"}). Programme précédent affiché."

@@ -24,6 +24,13 @@ class LiveSourcesTest {
         assertTrue(played.size > 20 && played.all { it.homeScore.isNotEmpty() && it.awayScore.isNotEmpty() })
         assertTrue(fixtures.list.filter { it.state == "pre" }.all { it.homeScore.isEmpty() })
 
+        // Deuxième source, sur deux compétitions seulement pour rester rapide : Pro D2 et Coupe du monde de biathlon.
+        val second = Repo.downloadSportsDb(System.currentTimeMillis(), listOf("rugby" to "5172", "biathlon" to "5342"))
+        println("SECOND ${second.list.groupingBy { it.source }.eachCount()} covered=${second.coveredDays.keys} ex. ${second.list.filter { it.source == "biathlon" }.take(4).map { it.home }}")
+        assertEquals(setOf("tsdb:5172", "tsdb:5342"), second.coveredDays.keys)
+        assertTrue(second.list.count { it.source == "rugby" } >= 8)
+        assertTrue(second.list.filter { it.source == "biathlon" }.all { it.away.isEmpty() && it.home.isNotEmpty() })
+
         // Rafraîchissement léger pendant les matchs : seulement les sources demandées, veille et jour même.
         val live = Repo.downloadFixtures(System.currentTimeMillis(), setOf("football", "nba"))
         println("LIVE ${live.list.groupingBy { it.source }.eachCount()} covered=${live.coveredDays.mapValues { it.value.size }}")

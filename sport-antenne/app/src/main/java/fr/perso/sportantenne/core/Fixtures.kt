@@ -44,7 +44,11 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
 
     /** Fusionne avec un téléchargement plus récent : les jours re-téléchargés remplacent les anciens. */
     fun mergedWith(fresh: Fixtures, keepAfter: Long): Fixtures {
-        val kept = list.filter { f -> f.start >= keepAfter && fresh.coveredDays[f.source]?.contains(dayOf(f.start)) != true }
+        // Une compétition relue en entier (clé « tsdb:… ») remplace son ancien relevé ; sinon on remplace jour par jour.
+        val kept = list.filter { f ->
+            f.start >= keepAfter && if (f.league.startsWith("tsdb:")) !fresh.coveredDays.containsKey(f.league)
+            else fresh.coveredDays[f.source]?.contains(dayOf(f.start)) != true
+        }
         val days = HashMap<String, Set<String>>()
         (coveredDays.keys + fresh.coveredDays.keys).forEach { s ->
             days[s] = (coveredDays[s] ?: emptySet()).filter { it >= dayOf(keepAfter) }.toSet() + (fresh.coveredDays[s] ?: emptySet())
@@ -114,6 +118,34 @@ object FixtureParsers {
             }
             if (home.isBlank() || away.isBlank()) continue
             out += Fixture(source, start, home, away, comp.optString("altGameNote", ""), homeLogo, awayLogo, homeScore, awayScore, state, clock)
+        }
+        return out
+    }
+
+    /**
+     * Journée ou étape d'une compétition dans TheSportsDB (deuxième source, indépendante de la première).
+     * Les matchs reportés ou annulés sont écartés ; les heures sont en temps universel.
+     */
+    fun sportsDb(json: String, source: String, leagueKey: String): List<Fixture> {
+        val out = ArrayList<Fixture>()
+        val events = JSONObject(json).optJSONArray("events") ?: return out
+        for (i in 0 until events.length()) {
+            val e = events.optJSONObject(i) ?: continue
+            val status = e.optString("strStatus").lowercase()
+            if (status.contains("postp") || status.contains("canc") || status == "pst" || status == "abd" || e.optString("strPostponed") == "yes") continue
+            val start = isoTime(e.optString("strTimestamp")) ?: continue
+            fun text(k: String) = e.optString(k).takeIf { it.isNotBlank() && it != "null" } ?: ""
+            val home = text("strHomeTeam")
+            val away = text("strAwayTeam")
+            val hs = text("intHomeScore")
+            val aw = text("intAwayScore")
+            val finished = hs.isNotEmpty() && aw.isNotEmpty() && (status == "ft" || status.contains("finished") || status == "aet")
+            // Épreuve individuelle (biathlon…) : le nom de l'épreuve tient lieu d'affiche.
+            out += Fixture(
+                source, start, home.ifEmpty { text("strEvent") }, away, leagueKey,
+                text("strHomeTeamBadge"), text("strAwayTeamBadge"),
+                if (finished) hs else "", if (finished) aw else "", if (finished) "post" else "", if (finished) "FT" else "",
+            )
         }
         return out
     }

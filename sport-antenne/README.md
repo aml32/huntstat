@@ -45,6 +45,14 @@ européen, LPGA) avec leurs dates, les soirées UFC, et le basket et le football
 américains. Un tournoi est confirmé au jour près (« tournoi en cours confirmé »), un match à l'heure près.
 Les réglages affichent ce que chaque calendrier a réellement fourni.
 
+**Deuxième source** : TheSportsDB (clé publique gratuite) donne les journées complètes de rugby
+(Top 14, Pro D2, Nations Championship, Six Nations, Champions Cup, URC, Premiership), handball
+(Starligue, Ligue des champions, Ligue européenne), basket (Betclic Élite, Euroligue, LFB), volley
+(Ligue A), hockey (Ligue Magnus) et les étapes de la Coupe du monde de biathlon avec l'heure de
+départ de chaque épreuve. L'accès gratuit est limité en débit : la lecture complète prend deux à
+trois minutes et n'est refaite que toutes les six heures, en arrière-plan. Pour un usage à plusieurs,
+il faut une clé payante.
+
 `core/LiveCheck.kt` compare chaque diffusion aux calendriers : un match qui démarre réellement
 pendant la diffusion est un **direct confirmé** ; une compétition couverte sans match à cette
 heure-là est une **rediffusion** (masquée). Pour les sports sans calendrier (tennis, golf, handball…),
@@ -59,7 +67,7 @@ et copié dans le presse-papiers. Les réglages affichent aussi l'état de chaqu
 
 ## Tests
 
-87 tests automatiques (`./gradlew testDebugUnitTest`) :
+90 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;

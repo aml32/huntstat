@@ -179,14 +179,14 @@ class AppFlowsTest {
         assertTrue("un calendrier absent est signalé", shown("✗ Tennis (tournois) : non chargé"))
         // Le diagnostic résume l'état réel de l'appli, prêt à être envoyé.
         val report = Repo.diagnostic(app, events(), settings())
-        assertTrue(report, report.startsWith("Sport Antenne 2.0"))
+        assertTrue(report, report.startsWith("Sport Antenne 2.1"))
         assertTrue(report, report.contains("football : 7 entrées, 3 jours couverts, aujourd'hui oui"))
         assertTrue(report, report.contains("tennis : 0 entrées, 0 jours couverts, aujourd'hui NON"))
         assertTrue(report, report.contains("directs confirmés") && report.contains("Football, 6 premiers : "))
         compose.onNodeWithText("Envoyer le diagnostic").performClick()
         compose.waitForIdle()
         val clip = (app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
-        assertTrue(clip!!.getItemAt(0).text.toString().startsWith("Sport Antenne 2.0"))
+        assertTrue(clip!!.getItemAt(0).text.toString().startsWith("Sport Antenne 2.1"))
         // Sans aucun calendrier, l'écran principal prévient au lieu d'afficher des « non confirmé » sans explication.
         assertFalse(shown("Calendriers sportifs indisponibles"))
     }

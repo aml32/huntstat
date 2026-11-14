@@ -496,7 +496,7 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
                 if (state.settings.hasAlert(e) && e.start > now) Icon(Icons.Filled.Notifications, "Alerte activée", Modifier.size(16.dp), tint = Orange)
             }
             if (e.kickoff > 0 && e.score == null) {
-                Text("Coup d'envoi ${hour(e.kickoff).replace(':', 'h')}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text((if (e.hasTeams) "Coup d'envoi " else "Départ ") + hour(e.kickoff).replace(':', 'h'), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             if (e.channels.size > 1) {
                 Text("Diffusé sur ${e.channels.size} chaînes", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -748,6 +748,8 @@ private fun ChannelsScreen(state: AppState) {
 private val CALENDAR_LABELS = listOf(
     "football" to "Football (matchs)", "rugby" to "Rugby (matchs)", "nba" to "NBA", "nfl" to "NFL", "nhl" to "NHL", "ncaab" to "Basket universitaire",
     "ncaaf" to "Football universitaire", "f1" to "Formule 1 (séances)", "tennis" to "Tennis (tournois)", "golf" to "Golf (tournois)", "ufc" to "UFC (soirées)",
+    "handball" to "Handball (matchs)", "basket" to "Basket français et européen", "volley" to "Volley (matchs)", "hockey" to "Hockey sur glace (matchs)",
+    "biathlon" to "Biathlon (épreuves)",
 )
 private val KEEP_CHOICES = listOf(0 to "Dès la fin", 60 to "1 h", 240 to "4 h", 720 to "12 h", fr.perso.sportantenne.Settings.KEEP_ALL to "Tous")
 private val DELAYS = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h")
@@ -805,7 +807,7 @@ private fun SettingsScreen(state: AppState) {
             )
         }
         Text(
-            "Sans calendrier (rugby international, handball, volley, cyclisme, biathlon, ski…), une diffusion porte la mention « Horaire non confirmé ».",
+            "La deuxième source (rugby, handball, basket, volley, hockey, biathlon) est lente : elle se charge en deux à trois minutes après l'ouverture, puis toutes les six heures. Sans calendrier (cyclisme, ski, équitation…), une diffusion porte la mention « Horaire non confirmé ».",
             Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Rapport complet à envoyer en cas de problème.
@@ -974,7 +976,7 @@ internal fun summary(e: Event, channels: Map<String, Channel>, now: Long): List<
     }
     lines += buildString {
         append(dayLabel(e.start, now)).append(" : prise d'antenne à ").append(h(e.start))
-        if (e.kickoff > 0) append(", coup d'envoi à ").append(h(e.kickoff))
+        if (e.kickoff > 0) append(if (e.hasTeams) ", coup d'envoi à " else ", départ à ").append(h(e.kickoff))
         append(", fin prévue vers ").append(h(e.stop)).append('.')
     }
     e.score?.let { lines += (if (it.finished) "Score final : " else "Score en cours : ") + "${e.home} ${it.home} – ${it.away} ${e.away}" + (if (!it.finished && it.clock.isNotEmpty()) " (${it.clock})." else ".") }

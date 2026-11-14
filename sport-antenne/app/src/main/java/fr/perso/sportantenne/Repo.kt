@@ -56,7 +56,7 @@ object Repo {
         try {
             val now = System.currentTimeMillis()
             val fresh = downloadFixtures(now)
-            if (fresh.list.isNotEmpty()) Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir)
+            if (fresh.list.isNotEmpty()) synchronized(this@Repo) { Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir) }
         } catch (e: Exception) {
             // rien : la vérification retombe sur le cache
         }
@@ -94,8 +94,65 @@ object Repo {
         val now = System.currentTimeMillis()
         val fresh = try { downloadFixtures(now, sources) } catch (e: Exception) { return@withContext null }
         if (fresh.list.isEmpty()) return@withContext null
-        Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir)
+        synchronized(this@Repo) { Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir) }
         GuideStore.load(ctx.filesDir)?.let { publish(ctx, it) }
+    }
+
+    /**
+     * Deuxième source (TheSportsDB) : journées complètes de rugby, handball, basket, volley, hockey et
+     * étapes de biathlon. L'accès gratuit est limité en débit : une requête toutes les 2,2 secondes,
+     * donc une lecture complète prend deux à trois minutes et n'est refaite que toutes les six heures.
+     */
+    private val SPORTSDB_LEAGUES = listOf(
+        "rugby" to "4430", "rugby" to "5172", "rugby" to "5852", "rugby" to "4714", "rugby" to "4550", "rugby" to "4446", "rugby" to "4414",
+        "handball" to "4536", "handball" to "4980", "handball" to "5275", "handball" to "5274",
+        "basket" to "4423", "basket" to "4546", "basket" to "5623", "volley" to "4582", "hockey" to "4927", "biathlon" to "5342",
+    )
+    internal fun sportsDbLeagues() = SPORTSDB_LEAGUES
+    private const val SPORTSDB = "https://www.thesportsdb.com/api/v1/json/123"
+    const val EXTRA_STALE_MS = 6 * 60 * 60 * 1000L
+
+    fun extraIsStale(ctx: Context): Boolean =
+        System.currentTimeMillis() - ctx.getSharedPreferences(STATE, Context.MODE_PRIVATE).getLong("extra", 0L) > EXTRA_STALE_MS
+
+    /** Lit la deuxième source et republie le programme ; null si rien n'a pu être lu. */
+    suspend fun refreshExtra(ctx: Context): Data? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val fresh = downloadSportsDb(now, SPORTSDB_LEAGUES)
+        if (fresh.coveredDays.isEmpty()) return@withContext null
+        synchronized(this@Repo) { Fixtures.load(ctx.filesDir).mergedWith(fresh, now - 2 * DAY).save(ctx.filesDir) }
+        ctx.getSharedPreferences(STATE, Context.MODE_PRIVATE).edit().putLong("extra", now).apply()
+        GuideStore.load(ctx.filesDir)?.let { publish(ctx, it) }
+    }
+
+    internal fun downloadSportsDb(now: Long, leagues: List<Pair<String, String>>, pauseMs: Long = 2200): Fixtures {
+        val list = ArrayList<Fixture>()
+        val covered = HashMap<String, MutableSet<String>>()
+        fun read(path: String): String { Thread.sleep(pauseMs); return get("$SPORTSDB/$path") }
+        for ((source, id) in leagues) {
+            val key = "tsdb:$id"
+            try {
+                // Le prochain match donne la saison et le numéro de la journée en cours.
+                val next = org.json.JSONObject(read("eventsnextleague.php?id=$id")).optJSONArray("events")?.optJSONObject(0) ?: continue
+                val season = next.optString("strSeason")
+                val round = next.optString("intRound").toIntOrNull() ?: continue
+                val found = ArrayList<Fixture>()
+                for (r in listOf(round, round + 1)) {
+                    found += try { FixtureParsers.sportsDb(read("eventsround.php?id=$id&r=$r&s=$season"), source, key) } catch (e: Exception) { emptyList() }
+                }
+                if (found.isEmpty()) continue
+                list += found
+                // Couverture : d'hier jusqu'au dernier match relevé, sans dépasser l'horizon du guide.
+                val last = minOf(found.maxOf { it.start }, now + 8 * DAY)
+                val days = covered.getOrPut(key) { HashSet() }
+                var d = now - DAY
+                while (d <= last) { days += Fixtures.dayOf(d); d += DAY }
+                failures.remove(key)
+            } catch (e: Exception) {
+                failures[key] = (e.message ?: e.javaClass.simpleName).take(80)
+            }
+        }
+        return Fixtures(list.distinct(), covered)
     }
 
     /** Heure de la dernière vérification réussie auprès des sources. */
@@ -243,11 +300,13 @@ object Repo {
         sb.appendLine("Sport Antenne ${BuildConfig.VERSION_NAME} — ${fmt.format(now)} — Android ${android.os.Build.VERSION.RELEASE} (${android.os.Build.MODEL})")
         sb.appendLine("Guide : ${events.size} diffusions, vérifié le ${if (lastCheck(ctx) > 0) fmt.format(lastCheck(ctx)) else "jamais"}")
         sb.appendLine("Calendriers :")
-        for (source in listOf("football", "rugby", "nba", "nfl", "nhl", "ncaab", "ncaaf", "f1", "tennis", "golf", "ufc")) {
+        for (source in listOf("football", "rugby", "nba", "nfl", "nhl", "ncaab", "ncaaf", "f1", "tennis", "golf", "ufc", "handball", "basket", "volley", "hockey", "biathlon")) {
             val covered = fixtures.coveredDays[source]
             sb.appendLine("  $source : ${counts[source] ?: 0} entrées, ${covered?.size ?: 0} jours couverts, aujourd'hui ${if (covered?.contains(today) == true) "oui" else "NON"}" +
                 (failures[source]?.let { " — ÉCHEC : $it" } ?: ""))
         }
+        sb.appendLine("Deuxième source : ${fixtures.coveredDays.keys.count { it.startsWith("tsdb:") }} compétitions sur ${SPORTSDB_LEAGUES.size} relues" +
+            failures.filterKeys { it.startsWith("tsdb:") }.let { if (it.isEmpty()) "" else " — ÉCHECS : $it" })
         sb.appendLine("Prochaines 24 h : ${upcoming.size} diffusions — ${upcoming.count { it.verified && it.precise }} directs confirmés, " +
             "${upcoming.count { it.verified && !it.precise }} tournois confirmés, ${upcoming.count { !it.verified && !it.replay }} non confirmés, ${upcoming.count { it.replay }} rediffusions")
         sb.appendLine("Par sport (confirmés/non confirmés/rediffusions) : " + upcoming.groupBy { it.sport }.entries.sortedByDescending { it.value.size }.take(12)
@@ -313,6 +372,7 @@ object Repo {
 class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result = try {
         Repo.refresh(applicationContext)
+        if (Repo.liveUpdates && Repo.extraIsStale(applicationContext)) runCatching { Repo.refreshExtra(applicationContext) }
         Result.success()
     } catch (e: Exception) {
         if (runAttemptCount < 3) Result.retry() else Result.failure()

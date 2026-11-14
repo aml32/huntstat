@@ -16,7 +16,7 @@ class LiveCheck(private val fixtures: Fixtures) {
     private val bySource: Map<String, List<Entry>> = fixtures.list.map { f ->
         val h = side(f.home)
         val a = side(f.away)
-        Entry(f, h, a, h.women || a.women || WOMEN.containsMatchIn(norm(f.league)))
+        Entry(f, h, a, h.women || a.women || f.league in WOMEN_LEAGUES || WOMEN.containsMatchIn(norm(f.league)))
     }.groupBy { it.f.source }
 
     /** Toutes les équipes connues d'une source, pour savoir si une correspondance exacte existe. */
@@ -34,6 +34,7 @@ class LiveCheck(private val fixtures: Fixtures) {
         if (source == "f1") return Resolution(formula1(b, entries))
         if (source == "tennis" || source == "golf") return Resolution(tournament(b, entries))
         if (source == "ufc") return Resolution(fightNight(b, entries))
+        if (source == "biathlon") return race(b, entries)
         if (b.home.isBlank() || b.away.isBlank()) return UNKNOWN
 
         val context = norm(b.competition + " " + b.detail)
@@ -68,7 +69,7 @@ class LiveCheck(private val fixtures: Fixtures) {
         // Même affiche programmée à un autre moment : cette diffusion n'est pas le direct.
         if (pairElsewhere) return REPLAY
         // Compétition entièrement couverte ce jour-là et aucun match trouvé : rediffusion.
-        if (comprehensive(source, b) && covered(source, b.start)) return REPLAY
+        if (comprehensive(source, b)) return REPLAY
         return UNKNOWN
     }
 
@@ -100,6 +101,24 @@ class LiveCheck(private val fixtures: Fixtures) {
         return if (known) Verdict.REPLAY else Verdict.UNKNOWN
     }
 
+    /**
+     * Biathlon : chaque épreuve du calendrier a son format, son sexe et son heure de départ.
+     * La diffusion est un direct si une épreuve compatible démarre pendant qu'elle est à l'antenne.
+     */
+    private fun race(b: Broadcast, entries: List<Entry>): Resolution {
+        if (entries.isEmpty()) return UNKNOWN
+        val guide = Races.parse(b)
+        for (e in entries) {
+            if (!(e.f.start >= b.start - 30 * MIN && e.f.start <= b.start + 150 * MIN && e.f.start < b.stop)) continue
+            val official = Races.parse("Biathlon", "", e.f.home, "", "")
+            // Quand le guide précise le format ou le sexe, ils doivent concorder avec l'épreuve officielle.
+            if (guide.format.isNotEmpty() && official.format.isNotEmpty() && guide.format != official.format) continue
+            if (guide.gender.isNotEmpty() && official.gender.isNotEmpty() && guide.gender != official.gender) continue
+            return Resolution(Verdict.LIVE, kickoff = e.f.start)
+        }
+        return if (comprehensive("biathlon", b)) REPLAY else UNKNOWN
+    }
+
     /** UFC : toutes les soirées sont au calendrier ; hors d'une soirée, c'est une rediffusion ou un magazine. */
     private fun fightNight(b: Broadcast, entries: List<Entry>): Verdict {
         if (entries.isEmpty() || !covered("ufc", b.start)) return Verdict.UNKNOWN
@@ -127,6 +146,8 @@ class LiveCheck(private val fixtures: Fixtures) {
     }
 
     companion object {
+        /** Compétitions féminines de la deuxième source, dont les noms d'équipes ne le précisent pas toujours. */
+        private val WOMEN_LEAGUES = setOf("tsdb:5274", "tsdb:5623")
         private val TOURS = listOf("wta", "atp", "lpga", "pga")
         private val GENERIC = setOf(
             "open", "tournoi", "tournament", "championship", "championnat", "championnats", "masters", "classic", "international", "internationaux",
@@ -158,6 +179,7 @@ class LiveCheck(private val fixtures: Fixtures) {
         private val STOP = setOf(
             "fc", "cf", "ac", "as", "sc", "afc", "cd", "ud", "sv", "fk", "sk", "bk", "if", "club", "de", "del", "da", "do", "la", "le",
             "les", "the", "of", "and", "et", "calcio", "football", "stade", "us", "rc", "so", "ogc", "losc", "aj", "ea", "sm", "sporting club",
+            "rugby", "handball", "hbc", "hb", "basket", "basketball", "bc", "volley", "volleyball", "ball", "vb", "hc", "hockey", "xv", "var",
             "women", "womens", "w", "feminines", "feminin", "u15", "u16", "u17", "u18", "u19", "u20", "u21", "u23", "1", "04", "05", "29", "1899", "1846",
         )
 
@@ -240,23 +262,57 @@ class LiveCheck(private val fixtures: Fixtures) {
                     comp.contains("wnba") -> null
                     Regex("\\bnba\\b").containsMatchIn(comp) -> "nba"
                     comp.contains("ncaa") -> "ncaab"
-                    else -> null
+                    else -> "basket"
                 }
                 "football americain" -> if (Regex("\\bnfl\\b").containsMatchIn(comp)) "nfl" else if (comp.contains("ncaa")) "ncaaf" else null
                 "tennis" -> "tennis"
                 "golf" -> "golf"
                 "mma" -> if (Regex("\\bufc\\b").containsMatchIn(comp)) "ufc" else null
-                "hockey" -> if (Regex("\\bnhl\\b").containsMatchIn(comp)) "nhl" else null
+                "hockey" -> if (Regex("\\bnhl\\b").containsMatchIn(comp)) "nhl" else "hockey"
+                "handball" -> "handball"
+                "volley ball" -> "volley"
+                "biathlon" -> "biathlon"
                 "rugby" -> "rugby"
                 "formule 1" -> "f1"
                 else -> null
             }
         }
 
-        private fun comprehensive(source: String, b: Broadcast): Boolean = when (source) {
-            "nba", "nfl", "nhl" -> true
+        /**
+         * Compétitions relues en entier dans la deuxième source : sport, motif du libellé, clé de couverture.
+         * L'ordre compte (le plus précis d'abord).
+         */
+        val SPORTSDB: List<Triple<String, Regex, String>> = listOf(
+            Triple("rugby", "top 14", "4430"), Triple("rugby", "pro d2", "5172"),
+            Triple("rugby", "championnat des nations|nations championship|coupe des nations", "5852"),
+            Triple("rugby", "six nations(?! feminin| u)|6 nations(?! feminin| u)", "4714"),
+            Triple("rugby", "champions cup|coupe d europe", "4550"), Triple("rugby", "united rugby|urc", "4446"),
+            Triple("rugby", "premiership", "4414"),
+            Triple("handball", "starligue|lnh|d1 masculine", "4536"), Triple("handball", "ligue des champions feminine", "5274"),
+            Triple("handball", "ligue des champions", "4980"), Triple("handball", "ligue europeenne|european league", "5275"),
+            Triple("basket ball", "betclic elite|elite(?! 2)|pro a|lnb", "4423"), Triple("basket ball", "euroligue(?! feminine)|euroleague", "4546"),
+            Triple("basket ball", "wonderligue|ligue feminine|lfb", "5623"),
+            Triple("volley ball", "spikeligue|ligue a(?! feminine)|alterna|ligue am", "4582"),
+            Triple("hockey", "ligue magnus|magnus", "4927"),
+            Triple("biathlon", "coupe du monde|world cup", "5342"),
+        ).map { Triple(it.first, Regex("\\b(?:${it.second})\\b"), "tsdb:${it.third}") }
+
+        /** Clé de la compétition dans la deuxième source, si elle y est suivie en entier. */
+        fun sportsDbKey(sport: String, competition: String): String? {
+            val s = norm(sport)
+            val c = norm(competition)
+            return SPORTSDB.firstOrNull { it.first == s && it.second.containsMatchIn(c) }?.third
+        }
+    }
+
+    /** Vrai si, sans match trouvé ce jour-là, on peut conclure à une rediffusion : la compétition est relevée en entier. */
+    private fun comprehensive(source: String, b: Broadcast): Boolean {
+        val day = Fixtures.dayOf(b.start)
+        sportsDbKey(b.sport, b.competition)?.let { key -> if (fixtures.coveredDays[key]?.contains(day) == true) return true }
+        return when (source) {
+            "nba", "nfl", "nhl" -> covered(source, b.start)
             // Le calendrier football couvre presque tout : seules quelques compétitions y échappent.
-            "football" -> !FOOT_UNCOVERED.containsMatchIn(norm(b.competition))
+            "football" -> covered(source, b.start) && !FOOT_UNCOVERED.containsMatchIn(norm(b.competition))
             else -> false
         }
     }

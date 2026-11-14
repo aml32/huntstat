@@ -216,7 +216,70 @@ class LiveCheckTest {
         assertEquals("couverture partielle : jamais de rediffusion déduite", Verdict.UNKNOWN, c.verdict(match("Texas", "Baylor", "NCAA", "Basket-ball")))
     }
 
+    private fun sportsDbEvent(ts: String, home: String?, away: String?, event: String = "", status: String = "NS", hs: String? = null, aw: String? = null) =
+        """{"strTimestamp":"$ts","strEvent":"$event","strHomeTeam":${home?.let { "\"$it\"" }},"strAwayTeam":${away?.let { "\"$it\"" }},
+           "strStatus":"$status","intHomeScore":${hs?.let { "\"$it\"" }},"intAwayScore":${aw?.let { "\"$it\"" }}}"""
+
+    @Test fun secondSourceConfirmsRugbyHandballAndTheirReplays() {
+        val json = """{"events":[${sportsDbEvent("2026-11-14T20:10:00", "Ireland Rugby", "Fiji Rugby")},
+            ${sportsDbEvent("2026-11-14T14:10:00", "Wales Rugby", "New Zealand Rugby", status = "FT", hs = "17", aw = "42")},
+            ${sportsDbEvent("2026-11-14T16:40:00", "England Rugby", "Japan Rugby", status = "Postponed")}]}"""
+        val rugby = FixtureParsers.sportsDb(json, "rugby", "tsdb:5852")
+        assertEquals("le match reporté est écarté", listOf("Ireland Rugby", "Wales Rugby"), rugby.map { it.home })
+        assertEquals(Fixture("rugby", t0 + 10 * min, "Ireland Rugby", "Fiji Rugby", "tsdb:5852"), rugby[0])
+        assertEquals("42", rugby[1].awayScore); assertEquals("post", rugby[1].state)
+        val hand = FixtureParsers.sportsDb("""{"events":[${sportsDbEvent("2026-11-14T20:00:00", "HBC Nantes", "Saint-Raphaël Var Handball")}]}""", "handball", "tsdb:4536")
+        val c = LiveCheck(Fixtures(rugby + hand, mapOf("tsdb:5852" to setOf(day), "tsdb:4536" to setOf(day))))
+
+        assertEquals(Verdict.LIVE, c.verdict(match("Irlande", "Fidji", "Championnat des nations", "Rugby")))
+        assertEquals("compétition relevée en entier, aucun match : rediffusion", Verdict.REPLAY, c.verdict(match("France", "Afrique du Sud", "Championnat des nations", "Rugby")))
+        assertEquals("match reporté : plus de direct", Verdict.REPLAY, c.verdict(match("Angleterre", "Japon", "Nations Championship", "Rugby")))
+        assertEquals("compétition non relevée : on ne tranche pas", Verdict.UNKNOWN, c.verdict(match("Canterbury", "Northland", "Championnat des provinces", "Rugby")))
+        assertEquals(Verdict.LIVE, c.verdict(match("Nantes", "Saint-Raphaël", "Daikin StarLigue", "Handball")))
+        assertEquals(Verdict.REPLAY, c.verdict(match("Chambéry", "Nîmes", "Daikin StarLigue", "Handball")))
+        assertEquals("jour non couvert : on ne tranche pas", Verdict.UNKNOWN, c.verdict(match("Chambéry", "Nîmes", "Daikin StarLigue", "Handball", start = t0 + 5 * 24 * 60 * min)))
+        // Le score final de la deuxième source est repris, dans l'ordre du guide.
+        val wales = Schedule.build(listOf(match("Nouvelle-Zélande", "Pays de Galles", "Championnat des nations", "Rugby", start = t0 - 6 * 60 * min)), c).single()
+        assertEquals(Score("42", "17", "post", "FT"), wales.score)
+        assertEquals("tsdb:5852", LiveCheck.sportsDbKey("Rugby", "Nations Championship")); assertEquals("tsdb:5172", LiveCheck.sportsDbKey("Rugby", "Pro D2"))
+        assertEquals(null, LiveCheck.sportsDbKey("Rugby", "Bledisloe Cup")); assertEquals(null, LiveCheck.sportsDbKey("Football", "Top 14"))
+    }
+
+    @Test fun biathlonRacesAreConfirmedWithTheirStartTime() {
+        val json = """{"events":[${sportsDbEvent("2026-11-14T20:10:00", null, null, "Mens 10km Sprint")},
+            ${sportsDbEvent("2026-11-15T13:15:00", null, null, "Womens 7.5km Sprint")},
+            ${sportsDbEvent("2026-11-15T16:00:00", null, null, "Single Mixed Relay")}]}"""
+        val c = LiveCheck(Fixtures(FixtureParsers.sportsDb(json, "biathlon", "tsdb:5342"), mapOf("tsdb:5342" to setOf(day, Fixtures.dayOf(t0 + 24 * 60 * min)))))
+        fun race(detail: String, start: Long = t0, competition: String = "Coupe du monde") =
+            Broadcast(start, start + 90 * min, "c1", "Biathlon", competition, competition, "", "", detail, "", Kind.EVENT, false)
+        val men = Schedule.build(listOf(race("Sprint 10 km messieurs")), c).single()
+        assertTrue(men.verified); assertTrue(men.precise)
+        assertEquals("heure de départ officielle", t0 + 10 * min, men.kickoff)
+        assertEquals("le sexe doit concorder", Verdict.REPLAY, c.verdict(race("Sprint 7,5 km dames")))
+        assertEquals("le format doit concorder", Verdict.REPLAY, c.verdict(race("Poursuite 12,5 km messieurs")))
+        assertEquals("sans précision du guide, l'épreuve du créneau suffit", Verdict.LIVE, c.verdict(race("")))
+        val sunday = XmltvParser.parseTime("20261115140000 +0100")!!
+        assertEquals(Verdict.LIVE, c.verdict(race("Sprint 7,5 km dames", sunday)))
+        assertEquals(Verdict.LIVE, c.verdict(race("Relais mixte simple", sunday + 180 * min)))
+        assertEquals("autre compétition que la Coupe du monde : on ne tranche pas", Verdict.UNKNOWN, c.verdict(race("Mass start messieurs", competition = "Courses de pré-saison")))
+    }
+
+    @Test fun secondSourceSurvivesHourlyRefreshesOfTheFirst() {
+        val tsdb = Fixture("rugby", t0, "Ireland Rugby", "Fiji Rugby", "tsdb:5852")
+        val stale = Fixture("rugby", t0 + 60 * min, "England Rugby", "Japan Rugby", "tsdb:5852")
+        val espn = Fixture("rugby", t0, "Pau", "Perpignan", "Top 14")
+        val cache = Fixtures(listOf(tsdb, stale, espn), mapOf("rugby" to setOf(day), "tsdb:5852" to setOf(day)))
+        // Relevé horaire de la première source : il ne doit pas effacer les matchs de la deuxième.
+        val hourly = cache.mergedWith(Fixtures(listOf(espn), mapOf("rugby" to setOf(day))), t0 - 24 * 60 * min)
+        assertEquals(setOf(tsdb, stale, espn), hourly.list.toSet())
+        // Nouveau relevé de la deuxième source : la compétition est remplacée en entier (le match reporté disparaît).
+        val six = hourly.mergedWith(Fixtures(listOf(tsdb), mapOf("tsdb:5852" to setOf(day))), t0 - 24 * 60 * min)
+        assertEquals(setOf(tsdb, espn), six.list.toSet())
+    }
+
     @Test fun malformedCalendarsDoNotCrash() {
+        assertTrue(FixtureParsers.sportsDb("{}", "rugby", "tsdb:1").isEmpty())
+        assertTrue(FixtureParsers.sportsDb("""{"events":[{"strTimestamp":"pas une date"},{}]}""", "rugby", "tsdb:1").isEmpty())
         assertTrue(FixtureParsers.tournaments("{}", "tennis", "atp").isEmpty())
         assertTrue(FixtureParsers.fightNights("""{"events":[{"name":"x"}]}""").isEmpty())
         assertTrue(FixtureParsers.espn("{}", "football").isEmpty())
