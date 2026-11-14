@@ -304,6 +304,13 @@ fun SportAntenneApp(state: AppState) {
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                if (state.events.isNotEmpty() && state.calendars.isEmpty() && !state.loading) {
+                    Text(
+                        "Calendriers sportifs indisponibles : aucun direct ne peut être confirmé pour l'instant. Touchez ↻ pour réessayer.",
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error).padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onError, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    )
+                }
                 when (Screen.entries[screen]) {
                     Screen.PROGRAMME -> ProgrammeScreen(visible, state, now, sportView, { sportView = it }) { selected = it }
                     Screen.FAVORITES -> FavoritesScreen(state)
@@ -462,7 +469,8 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
                 // Trois états, toujours affichés : confirmé par un calendrier, non confirmé, ou rediffusion.
                 Text(
                     when {
-                        e.verified -> "✓ Direct confirmé"
+                        e.verified && e.precise -> "✓ Direct confirmé"
+                        e.verified -> "✓ Tournoi en cours confirmé"
                         e.replay -> "Rediffusion"
                         else -> "Horaire non confirmé"
                     },
@@ -716,6 +724,10 @@ private fun ChannelsScreen(state: AppState) {
 
 // ───────────────────────────── Réglages ─────────────────────────────
 
+private val CALENDAR_LABELS = listOf(
+    "football" to "Football (matchs)", "rugby" to "Rugby (matchs)", "nba" to "NBA", "nfl" to "NFL", "nhl" to "NHL", "ncaab" to "Basket universitaire",
+    "ncaaf" to "Football universitaire", "f1" to "Formule 1 (séances)", "tennis" to "Tennis (tournois)", "golf" to "Golf (tournois)", "ufc" to "UFC (soirées)",
+)
 private val KEEP_CHOICES = listOf(0 to "Dès la fin", 60 to "1 h", 240 to "4 h", 720 to "12 h", fr.perso.sportantenne.Settings.KEEP_ALL to "Tous")
 private val DELAYS = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 h", 120 to "2 h")
 
@@ -759,6 +771,20 @@ private fun SettingsScreen(state: AppState) {
             else "Dernière vérification : " + SimpleDateFormat("EEEE d MMMM 'à' HH:mm", Locale.FRENCH).format(Date(state.lastUpdate)) + ".") +
                 "\nLe programme se revérifie tout seul toutes les heures : reports, annulations et changements d'horaire ou de chaîne.",
             Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium,
+        )
+        // Diagnostic : ce que chaque calendrier a réellement fourni au dernier chargement.
+        Text("Calendriers de vérification", Modifier.padding(start = 16.dp, top = 12.dp), fontWeight = FontWeight.Bold)
+        CALENDAR_LABELS.forEach { (key, label) ->
+            val n = state.calendars[key] ?: 0
+            Text(
+                if (n > 0) "✓ $label : $n" else "✗ $label : non chargé",
+                Modifier.padding(horizontal = 16.dp), fontSize = 14.sp,
+                color = if (n > 0) confirmedGreen() else MaterialTheme.colorScheme.error,
+            )
+        }
+        Text(
+            "Sans calendrier (rugby international, handball, volley, cyclisme, biathlon, ski…), une diffusion porte la mention « Horaire non confirmé ».",
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedButton(onClick = state::refresh, enabled = !state.loading, modifier = Modifier.padding(16.dp)) {
             Text(if (state.loading) "Mise à jour…" else "Mettre à jour maintenant")
@@ -810,7 +836,7 @@ private fun EventSheet(e: Event, state: AppState, now: Long, onClose: () -> Unit
                 Spacer(Modifier.height(8.dp))
                 Text(
                     (if (e.stop <= now) "Terminé · " else if (e.start <= now) "En cours · " else "") + dayLabel(e.start, now) + " de " + hour(e.start) + " à " + hour(e.stop) +
-                        if (e.replay) " · Rediffusion" else if (e.verified) " · Direct confirmé" else " · Horaire non confirmé",
+                        if (e.replay) " · Rediffusion" else if (e.verified && e.precise) " · Direct confirmé" else if (e.verified) " · Tournoi en cours confirmé" else " · Horaire non confirmé",
                     fontWeight = FontWeight.SemiBold, color = if (e.start <= now) LiveRed else MaterialTheme.colorScheme.onSurface,
                 )
                 RaceTags(e, st.color)

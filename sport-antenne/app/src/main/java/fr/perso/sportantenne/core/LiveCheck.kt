@@ -1,10 +1,11 @@
 package fr.perso.sportantenne.core
 
-enum class Verdict { LIVE, REPLAY, UNKNOWN }
+enum class Verdict { LIVE, ONGOING, REPLAY, UNKNOWN }
 
 /**
  * Recoupe une diffusion du guide TV avec les calendriers réels :
  *  - LIVE    : un match de ces équipes démarre vraiment pendant la diffusion ;
+ *  - ONGOING : le tournoi (tennis, golf) se joue bien ce jour-là, sans heure précise de match ;
  *  - REPLAY  : la compétition est couverte par le calendrier et aucun match ne correspond ;
  *  - UNKNOWN : le calendrier ne permet pas de trancher (sport ou compétition non couverts).
  */
@@ -31,6 +32,8 @@ class LiveCheck(private val fixtures: Fixtures) {
         val source = sourceOf(b) ?: return UNKNOWN
         val entries = bySource[source] ?: emptyList()
         if (source == "f1") return Resolution(formula1(b, entries))
+        if (source == "tennis" || source == "golf") return Resolution(tournament(b, entries))
+        if (source == "ufc") return Resolution(fightNight(b, entries))
         if (b.home.isBlank() || b.away.isBlank()) return UNKNOWN
 
         val context = norm(b.competition + " " + b.detail)
@@ -74,6 +77,35 @@ class LiveCheck(private val fixtures: Fixtures) {
         return if (entries.any { inWindow(b, it.f.start) }) Verdict.LIVE else Verdict.REPLAY
     }
 
+    /**
+     * Tennis et golf : on retrouve le tournoi par son nom ; s'il se joue ce jour-là la diffusion est plausible,
+     * s'il est connu mais à d'autres dates c'est une rediffusion.
+     */
+    private fun tournament(b: Broadcast, entries: List<Entry>): Verdict {
+        if (entries.isEmpty()) return Verdict.UNKNOWN
+        val guide = norm(translate(norm("${b.competition} ${b.title} ${b.detail}")))
+        val guideTokens = guide.split(' ').filter { it.length >= 4 && it !in GENERIC }.toSet()
+        val tour = TOURS.firstOrNull { Regex("\\b$it\\b").containsMatchIn(guide) }
+        var known = false
+        for (e in entries) {
+            if (tour != null && e.f.league != tour && !(tour == "pga" && e.f.league == "eur")) continue
+            val name = norm(e.f.home)
+            val same = name.split(' ').any { it in guideTokens } ||
+                (guide.contains("finals") && name.contains("finals") && tour != null) ||
+                (norm(b.competition).length >= 8 && (name.contains(norm(b.competition)) || norm(b.competition).contains(name)))
+            if (!same) continue
+            known = true
+            if (b.start >= e.f.start - 12 * 60 * MIN && b.start <= e.f.end + 12 * 60 * MIN) return Verdict.ONGOING
+        }
+        return if (known) Verdict.REPLAY else Verdict.UNKNOWN
+    }
+
+    /** UFC : toutes les soirées sont au calendrier ; hors d'une soirée, c'est une rediffusion ou un magazine. */
+    private fun fightNight(b: Broadcast, entries: List<Entry>): Verdict {
+        if (entries.isEmpty() || !covered("ufc", b.start)) return Verdict.UNKNOWN
+        return if (entries.any { b.stop > it.f.start - 30 * MIN && b.start < it.f.end }) Verdict.LIVE else Verdict.REPLAY
+    }
+
     /** Le coup d'envoi tombe pendant la diffusion (avant-match compris), pas avant qu'elle commence. */
     private fun inWindow(b: Broadcast, kickoff: Long): Boolean =
         kickoff >= b.start - 20 * MIN && kickoff <= b.start + 120 * MIN && kickoff < b.stop
@@ -95,6 +127,29 @@ class LiveCheck(private val fixtures: Fixtures) {
     }
 
     companion object {
+        private val TOURS = listOf("wta", "atp", "lpga", "pga")
+        private val GENERIC = setOf(
+            "open", "tournoi", "tournament", "championship", "championnat", "championnats", "masters", "classic", "international", "internationaux",
+            "coupe", "trophy", "trophee", "tour", "world", "series", "grand", "prix", "pres", "presented", "presentado", "finals", "finale", "final",
+            "tennis", "golf", "simple", "double", "dames", "messieurs", "hommes", "femmes", "circuit", "americain", "europeen", "partie", "quart",
+            "demi", "phase", "poules", "jour", "session", "night", "match", "play", "offs", "club", "country", "national", "invitational",
+        )
+        private val PLACES = listOf(
+            "roland garros" to "french open", "open d australie" to "australian open", "pekin" to "beijing", "shanghai" to "shanghai", "dubai" to "dubai",
+            "bale" to "basel", "vienne" to "vienna", "anvers" to "antwerp", "geneve" to "geneva", "hambourg" to "hamburg", "barcelone" to "barcelona",
+            "rome" to "italian", "montreal" to "canadian", "toronto" to "canadian", "monte carlo" to "monte carlo", "bercy" to "paris", "turin" to "finals",
+            "londres" to "london", "moscou" to "moscow", "lisbonne" to "lisbon", "seville" to "sevilla", "british open" to "the open championship",
+            "ecosse" to "scottish", "irlande" to "irish", "espagne" to "spain", "italie" to "italian", "allemagne" to "german", "coree" to "korea",
+            "japon" to "japan", "chine" to "china", "afrique du sud" to "south african", "arabie saoudite" to "saudi",
+        ).map { Regex("\\b${it.first}\\b") to it.first + " " + it.second }
+
+        /** Ajoute au libellé français les mots anglais équivalents, pour le comparer au nom officiel du tournoi. */
+        private fun translate(text: String): String {
+            var out = text
+            for ((re, both) in PLACES) out = re.replace(out, both)
+            return out
+        }
+
         private val UNKNOWN = Resolution(Verdict.UNKNOWN)
         private val REPLAY = Resolution(Verdict.REPLAY)
         private const val MIN = 60_000L
@@ -181,8 +236,16 @@ class LiveCheck(private val fixtures: Fixtures) {
             val comp = norm(competition)
             return when (norm(sport)) {
                 "football" -> "football"
-                "basket ball" -> if (Regex("\\bnba\\b").containsMatchIn(comp) && !comp.contains("wnba")) "nba" else null
-                "football americain" -> if (Regex("\\bnfl\\b").containsMatchIn(comp)) "nfl" else null
+                "basket ball" -> when {
+                    comp.contains("wnba") -> null
+                    Regex("\\bnba\\b").containsMatchIn(comp) -> "nba"
+                    comp.contains("ncaa") -> "ncaab"
+                    else -> null
+                }
+                "football americain" -> if (Regex("\\bnfl\\b").containsMatchIn(comp)) "nfl" else if (comp.contains("ncaa")) "ncaaf" else null
+                "tennis" -> "tennis"
+                "golf" -> "golf"
+                "mma" -> if (Regex("\\bufc\\b").containsMatchIn(comp)) "ufc" else null
                 "hockey" -> if (Regex("\\bnhl\\b").containsMatchIn(comp)) "nhl" else null
                 "rugby" -> "rugby"
                 "formule 1" -> "f1"

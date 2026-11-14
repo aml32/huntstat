@@ -172,6 +172,15 @@ class AppFlowsTest {
         waitFor("fiche ouverte") { shown("Score final") }
     }
 
+    @Test fun settingsShowWhichCalendarsLoaded() {
+        ready()
+        tab("Réglages")
+        assertTrue(shown("✓ Football (matchs) : 7"))
+        assertTrue("un calendrier absent est signalé", shown("✗ Tennis (tournois) : non chargé"))
+        // Sans aucun calendrier, l'écran principal prévient au lieu d'afficher des « non confirmé » sans explication.
+        assertFalse(shown("Calendriers sportifs indisponibles"))
+    }
+
     @Test fun everyChannelOfABroadcastIsShown() {
         ready()
         val lille = events().first { it.home == "Lille" && !it.replay }

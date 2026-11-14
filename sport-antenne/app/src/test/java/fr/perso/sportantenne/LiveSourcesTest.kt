@@ -12,6 +12,7 @@ class LiveSourcesTest {
         val fixtures = Repo.downloadFixtures(System.currentTimeMillis())
         val counts = fixtures.list.groupingBy { it.source }.eachCount()
         println("FIXTURES $counts covered=${fixtures.coveredDays.mapValues { it.value.size }}")
+        for (source in listOf("tennis", "golf", "ufc", "ncaab")) assertTrue("$source: ${counts[source]}", (counts[source] ?: 0) > 0)
         for (source in listOf("football", "nba", "nfl", "nhl", "f1")) {
             assertTrue("$source: ${counts[source]}", (counts[source] ?: 0) > 0)
             assertTrue("$source couvert", (fixtures.coveredDays[source]?.size ?: 0) >= 9)

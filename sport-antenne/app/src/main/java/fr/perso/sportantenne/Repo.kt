@@ -36,7 +36,11 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 
 /** Tout ce que l'appli affiche : programme, chaînes et catalogue des favoris possibles. */
-class Data(val events: List<Event>, val channels: Map<String, Channel>, val catalogue: Catalogue, val updated: Long)
+class Data(
+    val events: List<Event>, val channels: Map<String, Channel>, val catalogue: Catalogue, val updated: Long,
+    /** Nombre d'entrées chargées par calendrier (diagnostic affiché dans les réglages). */
+    val calendars: Map<String, Int> = emptyMap(),
+)
 
 /** Téléchargement du guide, cache local et mise à jour en arrière-plan. */
 object Repo {
@@ -101,7 +105,7 @@ object Repo {
     private const val STATE = "refresh"
     private const val DAY = 86_400_000L
     private const val ESPN = "https://site.api.espn.com/apis/site/v2/sports"
-    private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "289234", "270560", "242041", "244293", "267979")
+    private val RUGBY_LEAGUES = listOf("270559", "270557", "180659", "271937", "272073", "289234", "270560", "242041", "244293", "267979", "270563", "164205", "289237")
 
     private fun get(url: String): String {
         var last: Exception? = null
@@ -143,11 +147,24 @@ object Repo {
             RUGBY_LEAGUES.forEach { jobs += Job("rugby", inMonth, "$ESPN/rugby/$it/scoreboard?dates=$m&limit=1000") }
         }
         jobs += Job("f1", dayKeys, "https://api.jolpi.ca/ergast/f1/current.json", f1 = true)
+        for (m in months) jobs += Job("ufc", dayKeys.filter { it.replace("-", "").startsWith(m) }, "$ESPN/mma/ufc/scoreboard?dates=$m&limit=100", kind = "ufc")
+        // Tournois de tennis et de golf : un relevé tous les trois jours suffit, ils durent une semaine.
+        for (d in listOf(days[0], days[1], days[4], days[7])) {
+            val date = fmt("yyyyMMdd").format(d)
+            for (tour in listOf("atp", "wta")) jobs += Job("tennis", dayKeys, "$ESPN/tennis/$tour/scoreboard?dates=$date", kind = tour)
+            for (tour in listOf("pga", "eur", "lpga")) jobs += Job("golf", dayKeys, "$ESPN/golf/$tour/scoreboard?dates=$date", kind = tour)
+        }
+        // Sport universitaire américain : confirmation des directs uniquement.
+        for (d in days) {
+            val date = fmt("yyyyMMdd").format(d)
+            jobs += Job("ncaab", listOf(Fixtures.dayOf(d)), "$ESPN/basketball/mens-college-basketball/scoreboard?dates=$date&groups=50&limit=400")
+            jobs += Job("ncaaf", listOf(Fixtures.dayOf(d)), "$ESPN/football/college-football/scoreboard?dates=$date&groups=80&limit=400")
+        }
 
         return run(jobs)
     }
 
-    private class Job(val source: String, val covered: List<String>, val url: String, val f1: Boolean = false)
+    private class Job(val source: String, val covered: List<String>, val url: String, val f1: Boolean = false, val kind: String = "")
 
     private fun downloadLive(now: Long, sources: Set<String>, day: SimpleDateFormat): Fixtures {
         val jobs = ArrayList<Job>()
@@ -170,7 +187,12 @@ object Repo {
                 Callable<Pair<Job, List<Fixture>>?> {
                     try {
                         val body = get(job.url)
-                        job to (if (job.f1) FixtureParsers.formula1(body) else FixtureParsers.espn(body, job.source))
+                        job to when {
+                            job.f1 -> FixtureParsers.formula1(body)
+                            job.kind == "ufc" -> FixtureParsers.fightNights(body)
+                            job.kind.isNotEmpty() -> FixtureParsers.tournaments(body, job.source, job.kind)
+                            else -> FixtureParsers.espn(body, job.source)
+                        }
                     } catch (e: Exception) {
                         null
                     }
@@ -192,6 +214,8 @@ object Repo {
     /** Programme recoupé avec les calendriers en cache : à utiliser partout (écran, widget, alertes). */
     fun buildEvents(ctx: Context, guide: Guide): List<Event> =
         Schedule.build(guide.broadcasts, LiveCheck(Fixtures.load(ctx.filesDir)))
+
+    fun calendarCounts(ctx: Context): Map<String, Int> = Fixtures.load(ctx.filesDir).list.groupingBy { it.source }.eachCount()
 
     /** Renvoie le guide et son empreinte, ou null si le serveur indique qu'il n'a pas changé. */
     private fun download(etag: String?): Pair<Guide, String?>? {
@@ -229,7 +253,7 @@ object Repo {
         val settings = Settings.load(ctx)
         UpcomingWidget.render(ctx, events, channels, settings)
         Alerts.reschedule(ctx, events, channels, settings)
-        return Data(events, channels, catalogue, lastCheck(ctx).takeIf { it > 0 } ?: GuideStore.lastUpdate(ctx.filesDir))
+        return Data(events, channels, catalogue, lastCheck(ctx).takeIf { it > 0 } ?: GuideStore.lastUpdate(ctx.filesDir), calendarCounts(ctx))
     }
 
     fun scheduleBackgroundRefresh(ctx: Context) {

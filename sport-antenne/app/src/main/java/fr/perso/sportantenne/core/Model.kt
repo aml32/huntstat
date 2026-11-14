@@ -45,6 +45,8 @@ data class Event(
     val channels: List<String>,
     /** Direct confirmé par un calendrier sportif indépendant du guide TV. */
     val verified: Boolean = false,
+    /** Vrai si l'heure même du match est confirmée ; faux si seul le jour l'est (tournoi en cours). */
+    val precise: Boolean = true,
     /** Logos des équipes (direct confirmé uniquement). */
     val homeLogo: String = "",
     val awayLogo: String = "",
@@ -167,11 +169,14 @@ object Schedule {
                     detail = b.detail, desc = b.desc, kind = b.kind,
                     replay = when (verdict) {
                         Verdict.LIVE -> false
+                        // Tournoi bien en cours ce jour-là : reste à écarter les rediffusions du jour.
+                        Verdict.ONGOING -> guessReplay(b, idx != null && b.detail.isNotBlank())
                         Verdict.REPLAY -> true
                         Verdict.UNKNOWN -> guessReplay(b, idx != null && (teams || b.detail.isNotBlank()))
                     },
                     channels = listOf(b.channelId),
-                    verified = verdict == Verdict.LIVE,
+                    verified = verdict == Verdict.LIVE || (verdict == Verdict.ONGOING && !guessReplay(b, idx != null && b.detail.isNotBlank())),
+                    precise = verdict != Verdict.ONGOING,
                     homeLogo = resolution?.homeLogo ?: "", awayLogo = resolution?.awayLogo ?: "",
                     race = Races.parse(b), score = resolution?.score,
                 )

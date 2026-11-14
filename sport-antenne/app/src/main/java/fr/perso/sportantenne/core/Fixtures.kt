@@ -23,6 +23,8 @@ data class Fixture(
     val state: String = "",
     /** Repère de jeu donné par le calendrier : « 67' », « HT », « FT », « Q3 4:12 »… */
     val clock: String = "",
+    /** Fin de l'épreuve pour un tournoi ou une soirée (0 pour un match). */
+    val end: Long = 0L,
 )
 
 /** Les calendriers téléchargés et les jours qu'ils couvrent réellement (source → jours AAAA-MM-JJ, UTC). */
@@ -32,7 +34,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
         tmp.bufferedWriter().use { w ->
             coveredDays.forEach { (source, days) -> days.forEach { w.write("D\t$source\t$it\n") } }
             list.forEach { f ->
-                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league), clean(f.homeLogo), clean(f.awayLogo), clean(f.homeScore), clean(f.awayScore), clean(f.state), clean(f.clock)).joinToString("\t"))
+                w.write(listOf("F", f.source, f.start, clean(f.home), clean(f.away), clean(f.league), clean(f.homeLogo), clean(f.awayLogo), clean(f.homeScore), clean(f.awayScore), clean(f.state), clean(f.clock), f.end).joinToString("\t"))
                 w.write("\n")
             }
         }
@@ -64,7 +66,7 @@ class Fixtures(val list: List<Fixture>, val coveredDays: Map<String, Set<String>
             f.forEachLine { line ->
                 val p = line.split('\t')
                 if (p[0] == "D" && p.size >= 3) days.getOrPut(p[1]) { HashSet() } += p[2]
-                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5], p.getOrElse(6) { "" }, p.getOrElse(7) { "" }, p.getOrElse(8) { "" }, p.getOrElse(9) { "" }, p.getOrElse(10) { "" }, p.getOrElse(11) { "" }) }
+                else if (p[0] == "F" && p.size >= 6) p[2].toLongOrNull()?.let { list += Fixture(p[1], it, p[3], p[4], p[5], p.getOrElse(6) { "" }, p.getOrElse(7) { "" }, p.getOrElse(8) { "" }, p.getOrElse(9) { "" }, p.getOrElse(10) { "" }, p.getOrElse(11) { "" }, p.getOrNull(12)?.toLongOrNull() ?: 0L) }
             }
             return Fixtures(list, days)
         }
@@ -112,6 +114,32 @@ object FixtureParsers {
             }
             if (home.isBlank() || away.isBlank()) continue
             out += Fixture(source, start, home, away, comp.optString("altGameNote", ""), homeLogo, awayLogo, homeScore, awayScore, state, clock)
+        }
+        return out
+    }
+
+    /** Tournois de tennis ou de golf : un événement = un tournoi avec ses dates de début et de fin. */
+    fun tournaments(json: String, source: String, tour: String): List<Fixture> {
+        val out = ArrayList<Fixture>()
+        val events = JSONObject(json).optJSONArray("events") ?: return out
+        for (i in 0 until events.length()) {
+            val e = events.optJSONObject(i) ?: continue
+            val name = e.optString("name")
+            val start = isoTime(e.optString("date")) ?: continue
+            val end = isoTime(e.optString("endDate")) ?: (start + 4 * 86_400_000L)
+            if (name.isNotBlank()) out += Fixture(source, start, name, "", tour, end = end)
+        }
+        return out
+    }
+
+    /** Soirées UFC : l'heure donnée est celle du début des combats préliminaires. */
+    fun fightNights(json: String): List<Fixture> {
+        val out = ArrayList<Fixture>()
+        val events = JSONObject(json).optJSONArray("events") ?: return out
+        for (i in 0 until events.length()) {
+            val e = events.optJSONObject(i) ?: continue
+            val start = isoTime(e.optString("date")) ?: continue
+            out += Fixture("ufc", start, e.optString("name"), "", "ufc", end = start + 8 * 3_600_000L)
         }
         return out
     }

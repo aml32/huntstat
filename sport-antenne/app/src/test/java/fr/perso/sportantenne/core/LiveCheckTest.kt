@@ -163,7 +163,62 @@ class LiveCheckTest {
         assertTrue(ChannelLogos.candidates(null, "inconnue").isEmpty())
     }
 
+    private fun show(sport: String, competition: String, detail: String = "", start: Long = t0, shown: Boolean = false) =
+        Broadcast(start, start + 120 * min, "c1", sport, competition, competition, "", "", detail, "", Kind.EVENT, shown)
+
+    @Test fun tennisAndGolfTournamentsAreConfirmedByTheirDates() {
+        val week = 7 * 24 * 60 * min
+        val json = """{"events":[{"name":"Bybit Stockholm Open","date":"2026-11-09T05:00Z","endDate":"2026-11-15T04:59Z"},
+            {"name":"Nitto ATP Finals","date":"2026-11-15T05:00Z","endDate":"2026-11-22T04:59Z"}]}"""
+        val wta = """{"events":[{"name":"FAGE WTA Finals Indian Wells","date":"2026-11-08T05:00Z","endDate":"2026-11-16T04:59Z"}]}"""
+        val golf = """{"events":[{"name":"DP World Tour Championship","date":"2026-11-12T05:00Z","endDate":"2026-11-15T05:00Z"},
+            {"name":"Austin Championship pres. by Compliance Solutions","date":"2026-11-12T05:00Z","endDate":"2026-11-15T05:00Z"}]}"""
+        val c = LiveCheck(
+            Fixtures(
+                FixtureParsers.tournaments(json, "tennis", "atp") + FixtureParsers.tournaments(wta, "tennis", "wta") + FixtureParsers.tournaments(golf, "golf", "eur"),
+                mapOf("tennis" to setOf(day), "golf" to setOf(day)),
+            ),
+        )
+        // Samedi 14 : Stockholm et les WTA Finals se jouent ; les ATP Finals ne commencent que le lendemain.
+        assertEquals(Verdict.ONGOING, c.verdict(show("Tennis", "ATP 250 Stockholm")))
+        assertEquals(Verdict.ONGOING, c.verdict(show("Tennis", "Tournoi ATP de Stockholm")))
+        assertEquals(Verdict.ONGOING, c.verdict(show("Tennis", "WTA Finals")))
+        assertEquals("tournoi connu mais pas encore commencé", Verdict.REPLAY, c.verdict(show("Tennis", "ATP Finals", start = t0 - 2 * 24 * 60 * min)))
+        assertEquals(Verdict.ONGOING, c.verdict(show("Tennis", "ATP Finals", start = t0 + 2 * 24 * 60 * min)))
+        assertEquals("tournoi terminé depuis une semaine", Verdict.REPLAY, c.verdict(show("Tennis", "ATP 250 Stockholm", start = t0 + week)))
+        assertEquals("tournoi absent du calendrier : on ne tranche pas", Verdict.UNKNOWN, c.verdict(show("Tennis", "CO'Met Orléans Open")))
+        assertEquals("un tournoi féminin ne confirme pas un tournoi masculin", Verdict.UNKNOWN, c.verdict(show("Tennis", "ATP 500 Indian Wells")))
+        assertEquals(Verdict.ONGOING, c.verdict(show("Golf", "DP World Tour Championship", "3e tour")))
+        assertEquals(Verdict.ONGOING, c.verdict(show("Golf", "Championnat d'Austin")))
+        assertEquals(Verdict.UNKNOWN, c.verdict(show("Golf", "Open de Sea Island")))
+
+        // À l'écran : confirmé au jour près, sauf si le guide signale une rediffusion.
+        val live = Schedule.build(listOf(show("Tennis", "WTA Finals")), c).single()
+        assertTrue(live.verified); assertFalse(live.precise); assertFalse(live.replay)
+        val rerun = Schedule.build(listOf(show("Tennis", "WTA Finals", shown = true)), c).single()
+        assertFalse(rerun.verified); assertTrue(rerun.replay)
+        assertTrue("un match de football confirmé l'est à l'heure près", Schedule.build(listOf(match("Lille", "Lyon")), check(foot("Lille", "Lyon"))).single().precise)
+    }
+
+    @Test fun ufcNightsAreConfirmedAndTheRestIsReplay() {
+        val json = """{"events":[{"name":"UFC 334: Gane vs. Hokit","date":"2026-11-14T22:00Z"}]}"""
+        val c = LiveCheck(Fixtures(FixtureParsers.fightNights(json), mapOf("ufc" to setOf(day, Fixtures.dayOf(t0 + 24 * 60 * min), Fixtures.dayOf(t0 - 48 * 60 * min)))))
+        val card = XmltvParser.parseTime("20261115030000 +0100")!! // carte principale, dans la nuit
+        assertEquals(Verdict.LIVE, c.verdict(Broadcast(card, card + 180 * min, "c1", "MMA", "UFC", "UFC", "Ciryl Gane", "Josh Hokit", "", "", Kind.EVENT, false)))
+        assertEquals(Verdict.REPLAY, c.verdict(show("MMA", "UFC", start = t0 - 48 * 60 * min)))
+        assertEquals("autre organisation : pas de calendrier", Verdict.UNKNOWN, c.verdict(show("MMA", "KSW")))
+    }
+
+    @Test fun collegeSportsConfirmLivesOnly() {
+        val game = Fixture("ncaab", t0 + 10 * min, "Kansas Jayhawks", "UNLV Rebels", "")
+        val c = LiveCheck(Fixtures(listOf(game), mapOf("ncaab" to setOf(day))))
+        assertEquals(Verdict.LIVE, c.verdict(match("Kansas", "UNLV", "NCAA", "Basket-ball")))
+        assertEquals("couverture partielle : jamais de rediffusion déduite", Verdict.UNKNOWN, c.verdict(match("Texas", "Baylor", "NCAA", "Basket-ball")))
+    }
+
     @Test fun malformedCalendarsDoNotCrash() {
+        assertTrue(FixtureParsers.tournaments("{}", "tennis", "atp").isEmpty())
+        assertTrue(FixtureParsers.fightNights("""{"events":[{"name":"x"}]}""").isEmpty())
         assertTrue(FixtureParsers.espn("{}", "football").isEmpty())
         assertTrue(FixtureParsers.espn("""{"events":[{"competitions":[]},{"competitions":[{"competitors":[{}]}]}]}""", "football").isEmpty())
         assertTrue(FixtureParsers.formula1("{}").isEmpty())

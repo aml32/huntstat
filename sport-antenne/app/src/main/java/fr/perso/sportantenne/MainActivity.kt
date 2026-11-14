@@ -75,6 +75,8 @@ class AppState(app: Application) : AndroidViewModel(app) {
         private set
     var lastUpdate by mutableLongStateOf(0L)
         private set
+    var calendars by mutableStateOf<Map<String, Int>>(emptyMap())
+        private set
 
     /** L'appli est à l'écran : les scores ne sont rafraîchis que dans ce cas. */
     @Volatile var foreground = false
@@ -102,6 +104,7 @@ class AppState(app: Application) : AndroidViewModel(app) {
         catalogue = data.catalogue
         events = data.events
         lastUpdate = data.updated
+        calendars = data.calendars
     }
 
     fun refreshIfStale() {

@@ -40,6 +40,11 @@ reports, annulations et changements d'horaire.
 2. **Calendriers réels** (`core/Fixtures.kt`) : tableau des scores public d'ESPN (football toutes
    compétitions, NBA, NFL, NHL, rugby) et Jolpica/Ergast (toutes les séances de Formule 1).
 
+Les mêmes tableaux d'ESPN donnent aussi les tournois de tennis (ATP, WTA) et de golf (PGA, circuit
+européen, LPGA) avec leurs dates, les soirées UFC, et le basket et le football universitaires
+américains. Un tournoi est confirmé au jour près (« tournoi en cours confirmé »), un match à l'heure près.
+Les réglages affichent ce que chaque calendrier a réellement fourni.
+
 `core/LiveCheck.kt` compare chaque diffusion aux calendriers : un match qui démarre réellement
 pendant la diffusion est un **direct confirmé** ; une compétition couverte sans match à cette
 heure-là est une **rediffusion** (masquée). Pour les sports sans calendrier (tennis, golf, handball…),
@@ -48,7 +53,7 @@ des indices du guide servent de repli (`Schedule.guessReplay` dans `core/Model.k
 
 ## Tests
 
-80 tests automatiques (`./gradlew testDebugUnitTest`) :
+84 tests automatiques (`./gradlew testDebugUnitTest`) :
 
 - `XmltvParserTest` — lecture du guide TV ; `LiveCheckTest` — directs, rediffusions, reports,
   annulations, noms d'équipes français/anglais, hommes/femmes/jeunes ; `CompetitionsTest` — catalogue par pays ;

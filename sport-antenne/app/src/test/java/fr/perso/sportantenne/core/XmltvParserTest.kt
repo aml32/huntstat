@@ -136,6 +136,8 @@ class XmltvParserTest {
 
     /** Charge les calendriers téléchargés dans FIXTURES_DIR (soc_JJ.json, nba.json, nfl.json, nhl.json, rug_*.json, f1.json). */
     private fun realFixtures(): Fixtures {
+        // Avec LIVE_SOURCES=1, les vrais calendriers en ligne, exactement comme l'appli les lit.
+        if (System.getenv("LIVE_SOURCES") == "1") return fr.perso.sportantenne.Repo.downloadFixtures(System.currentTimeMillis())
         val dir = File(System.getenv("FIXTURES_DIR") ?: return Fixtures.EMPTY)
         val list = ArrayList<Fixture>()
         val days = HashMap<String, MutableSet<String>>()
@@ -174,7 +176,9 @@ class XmltvParserTest {
         val byVerdict = firsts.groupBy { (LiveCheck.sourceOf(it) ?: "-") + " " + check.verdict(it) }
         sb.appendLine("VERDICTS " + byVerdict.mapValues { it.value.size }.toSortedMap())
         fun line(e: Event) = "  ${java.text.SimpleDateFormat("EEE dd HH:mm").format(e.start)} | ${e.sport} | ${e.competition} | ${e.headline} | ${e.detail} | ${e.channels.map { c -> names[c] }}"
-        for (sport in listOf("Football", "Rugby", "Basket-ball", "Formule 1", "Football américain", "Hockey")) {
+        sb.appendLine("PAR SPORT (affichés : confirmés / non confirmés) " + ev.filter { !it.replay }.groupBy { it.sport }
+            .entries.sortedByDescending { it.value.size }.joinToString { "${it.key}=${it.value.count { e -> e.verified }}/${it.value.count { e -> !e.verified }}" })
+        for (sport in listOf("Football", "Rugby", "Basket-ball", "Formule 1", "Football américain", "Hockey", "Tennis", "Golf", "MMA")) {
             sb.appendLine("== $sport VERIFIED"); ev.filter { it.sport == sport && it.verified }.forEach { sb.appendLine(line(it)) }
             sb.appendLine("== $sport UNVERIFIED BUT SHOWN"); ev.filter { it.sport == sport && !it.verified && !it.replay }.forEach { sb.appendLine(line(it)) }
             sb.appendLine("== $sport REPLAY (sample)"); ev.filter { it.sport == sport && it.replay }.shuffled(java.util.Random(3)).take(25).forEach { sb.appendLine(line(it)) }
