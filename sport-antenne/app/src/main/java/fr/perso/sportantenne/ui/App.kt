@@ -16,6 +16,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import fr.perso.sportantenne.core.Races
@@ -176,8 +178,8 @@ private val LOGO_BACKGROUND = Brush.verticalGradient(listOf(Color(0xFF78909C), C
 private val CHANNEL_COLORS = listOf(0xFF1565C0, 0xFFC62828, 0xFF2E7D32, 0xFF6A1B9A, 0xFFEF6C00, 0xFF00838F, 0xFFAD1457, 0xFF4E342E).map { Color(it) }
 
 /**
- * Pastille de sport dessinée : disque en dégradé avec reflet et ombre portée, pictogramme au centre.
- * Elle rebondit légèrement quand elle devient active et s'estompe quand elle ne l'est pas.
+ * Miniature du sport : le pictogramme lui-même, en grand et sans cadre (ballon de football, balle de tennis,
+ * ballon de basket…), avec une ombre portée. Il rebondit quand il devient actif et s'estompe sinon.
  */
 @Composable
 private fun SportBadge(sport: String, size: Dp, active: Boolean = true) {
@@ -185,23 +187,11 @@ private fun SportBadge(sport: String, size: Dp, active: Boolean = true) {
     val scale by animateFloatAsState(
         if (active) 1f else 0.84f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow), label = "badge",
     )
-    val light = lerp(st.color, Color.White, 0.5f)
-    val dark = lerp(st.color, Color.Black, 0.3f)
-    Box(
-        Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (active) 1f else 0.45f }
-            .shadow(if (active) 6.dp else 0.dp, CircleShape).clip(CircleShape)
-            .background(Brush.linearGradient(listOf(light, st.color, dark)))
-            .drawBehind {
-                // Reflet : un ovale clair dans le tiers supérieur.
-                drawOval(
-                    Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.6f), Color.Transparent)),
-                    topLeft = Offset(this.size.width * 0.16f, this.size.height * 0.06f),
-                    size = Size(this.size.width * 0.68f, this.size.height * 0.46f),
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(st.emoji, fontSize = (size.value * 0.5f).sp)
+    Box(Modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (active) 1f else 0.4f }, contentAlignment = Alignment.Center) {
+        Text(
+            st.emoji, fontSize = (size.value * 0.78f).sp, maxLines = 1,
+            style = TextStyle(shadow = Shadow(Color.Black.copy(alpha = 0.35f), Offset(0f, 3f), 6f)),
+        )
     }
 }
 
@@ -474,7 +464,7 @@ private fun EventRow(e: Event, state: AppState, now: Long, onOpen: (Event) -> Un
     ) {
         Box(Modifier.width(6.dp).fillMaxHeight().background(st.color))
         Spacer(Modifier.width(8.dp))
-        SportBadge(e.sport, 32.dp)
+        SportBadge(e.sport, 44.dp)
         Column(Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TeamLogo(e.homeLogo)
@@ -527,10 +517,12 @@ private fun ScoreBox(score: fr.perso.sportantenne.core.Score, live: Boolean) {
 @Composable
 private fun TeamLogo(url: String, start: Boolean = false) {
     if (url.isEmpty()) return
-    SubcomposeAsyncImage(
-        model = url, contentDescription = null,
-        modifier = Modifier.padding(start = if (start) 6.dp else 0.dp, end = if (start) 0.dp else 6.dp).size(24.dp),
-        success = { SubcomposeAsyncImageContent() },
+    // Aucune place n'est réservée tant que l'image n'est pas arrivée : pas de trou si elle ne se charge pas.
+    var loaded by remember(url) { mutableStateOf(false) }
+    AsyncImage(
+        url, null,
+        if (loaded) Modifier.padding(start = if (start) 6.dp else 0.dp, end = if (start) 0.dp else 6.dp).size(24.dp) else Modifier.size(0.dp),
+        onSuccess = { loaded = true },
     )
 }
 
