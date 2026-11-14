@@ -620,7 +620,11 @@ private fun CompetitionPicker(sport: String, state: AppState, onBack: () -> Unit
         val out = ArrayList<Any>()
         // Un seul bloc par pays, dans l'ordre du catalogue ; les compétitions hors catalogue en dernier.
         val groups = all.filter { q.isEmpty() || norm(it.name).contains(q) || norm(it.country).contains(q) }.groupBy { it.country }
-        for ((country, list) in groups.entries.sortedBy { it.key == Competitions.OTHER }) {
+        // France d'abord, puis les coupes d'Europe et les compétitions internationales, puis les autres pays.
+        fun rank(country: String) = when (country) {
+            Competitions.FR -> 0; Competitions.EU -> 1; Competitions.WORLD -> 2; Competitions.OTHER -> 9; else -> 5
+        }
+        for ((country, list) in groups.entries.sortedBy { rank(it.key) }) {
             out.add(country)
             out.addAll(list.distinctBy { it.id })
         }
@@ -636,7 +640,7 @@ private fun CompetitionPicker(sport: String, state: AppState, onBack: () -> Unit
         }
         Text(
             when (val n = settings.competitionCount(sport)) {
-                0 -> "Aucune compétition cochée : tout le $sport est affiché. Cochez celles que vous voulez suivre pour masquer les autres."
+                0 -> "Aucune compétition cochée : tout le $sport est affiché. Cochez celles que vous voulez suivre pour masquer les autres. Les coupes d'Europe sont dans la rubrique Europe, les sélections dans International."
                 else -> "$n compétition(s) cochée(s) : seules celles-ci sont affichées."
             },
             Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontSize = 14.sp,

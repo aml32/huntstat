@@ -250,6 +250,17 @@ class AppFlowsTest {
         assertTrue(shown("Bruges – Gand")); assertTrue(shown("Arsenal – Chelsea")); assertFalse(shown("Alcaraz – Sinner"))
     }
 
+    @Test fun europeanCupsComeRightAfterFrance() {
+        ready()
+        tab("Favoris"); openSport("Football")
+        fun top(text: String) = compose.onNodeWithText(text).fetchSemanticsNode().boundsInRoot.top
+        val france = top("🇫🇷 France"); val europe = top("🇪🇺 Europe"); val world = top("🌍 International"); val england = top("🇬🇧 Angleterre")
+        assertTrue("ordre : France, Europe, International, puis les autres pays", france < europe && europe < world && world < england)
+        assertTrue(top("Ligue des champions") in europe..world); assertTrue(top("Ligue Europa") in europe..world); assertTrue(top("Ligue Conférence") in europe..world)
+        compose.onNodeWithText("Ligue des champions").performClick()
+        waitFor("Ligue des champions cochée") { settings().isFavCompetition("Football", Competitions.idOf("Football", "Ligue des champions")) }
+    }
+
     @Test fun searchingCompetitionsAndThoseOutsideTheCatalogue() {
         ready()
         tab("Favoris"); openSport("Football")
